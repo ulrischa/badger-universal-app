@@ -14,6 +14,17 @@ values through a scoped API. Adding a display app does not require new firmware.
 The German administration includes app/device registration, assignments,
 activation, deletion, key rotation, a display layout preview and an audit trail.
 
+## Installation and usage guides
+
+**Step-by-step instructions (German):**
+
+- **[Install the PHP server](docs/installation-server.md)** — requirements, HTTPS, Nginx/Apache, private storage, SFTP/FTPS hosting and maintenance.
+- **[Set up the Badger 2040 W](docs/installation-badger.md)** — firmware, USB transfer, configuration, CA certificate, UTC clock and recovery.
+- **[Use the hub and publish data](docs/usage.md)** — first app, device assignments, buttons, PHP publishing, intervals and key rotation.
+- **[Understand the push/pull data flow](docs/data-flow.md)** — architecture and sequence diagrams, alternatives, latency and failure behavior.
+
+**Recommended order: install the server → register a sample app and device → configure the Badger → add an independent data producer.**
+
 ## Status
 
 Implemented and exercised with server, HTTP, device-model and transport tests.
@@ -35,6 +46,24 @@ The hub performs **no outbound HTTP requests**. An unavailable data source canno
 block device requests, and there is no arbitrary URL-fetch/SSRF surface. Producers
 own their source-specific integration. This version does not ship Home Assistant,
 Fronius, weather or other domain-specific adapters.
+
+### Push upstream, pull on the device
+
+**The producer pushes pages to the hub; the Badger pulls a stored snapshot on its timer or with B. This keeps source collection outside device requests. App registration does not start a producer, and B does not trigger a fresh source measurement.**
+
+```mermaid
+flowchart TD
+    Source["Data source"] -->|"Event or scheduled read"| Producer["Independent producer"]
+    Producer -->|"Publish pages"| Hub["PHP hub"]
+    Admin["Web administration"] -->|"Register and assign"| Hub
+    Hub -->|"Save validated data"| Store[("SQLite")]
+    Store -->|"Read snapshot"| Hub
+    Badge["Badger"] -->|"GET manifest: timer or B"| Hub
+    Hub -->|"JSON response"| Badge
+    Badge -->|"Local navigation"| Screen["Display and offline cache"]
+```
+
+**This hybrid design is retained for periodic read-only displays. It is not an event queue or immediate push delivery: intermediate updates can be skipped, and a successful publish does not acknowledge display on the device. See the [data-flow decision](docs/data-flow.md) for timing examples and alternatives.**
 
 ## Install the web service
 

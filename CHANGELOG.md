@@ -1,5 +1,11 @@
 # Changelog
 
+## Documentation update — 2026-10-04
+
+- **Added step-by-step German server, Badger and usage guides.**
+- **Documented the retained producer-push/device-pull design with Mermaid diagrams, alternatives, timing and outage behavior.**
+- **Clarified that app registration does not start a producer and device refresh does not trigger source collection.**
+
 ## Initial implementation — 2026-10-04
 
 - Added a PHP/SQLite app registry, device assignments and scoped publisher API.

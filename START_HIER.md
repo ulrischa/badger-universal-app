@@ -30,3 +30,14 @@ sind nicht enthalten. Die Tests ersetzen keinen Test auf deinem echten Badger;
 die Hardware-Abnahme ist in `docs/verification.md` beschrieben.
 
 Vollständige Installation und Betrieb: [README.md](README.md).
+
+## Ausführliche Anleitungen
+
+- **[Server installieren](docs/installation-server.md)**
+- **[Badger einrichten](docs/installation-badger.md)**
+- **[Apps und Geräte benutzen, dynamische Daten liefern](docs/usage.md)**
+- **[Push-/Pull-Datenfluss mit Diagrammen und Begründung](docs/data-flow.md)**
+
+**Der Publisher liefert an den Hub; der Badger holt dessen gespeicherte Daten ab.
+Das Anlegen einer App startet noch keinen Datenlieferanten. Taste B liest den Hub,
+sie startet keine neue Messung an der Datenquelle.**
