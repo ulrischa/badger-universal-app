@@ -1,0 +1,9 @@
+/var/*
+!/var/.gitkeep
+/device/config.py
+/device/ca.der
+/device/cache*.json
+__pycache__/
+*.pyc
+.env
+/test-results/

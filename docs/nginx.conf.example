@@ -1,0 +1,29 @@
+# Adapt paths, domain, certificates and PHP socket to your installation.
+server {
+    listen 443 ssl;
+    server_name badge.example.com;
+    ssl_certificate /etc/letsencrypt/live/badge.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/badge.example.com/privkey.pem;
+    root /srv/badger-hub/public;
+    index index.php;
+    client_max_body_size 16k;
+    client_body_timeout 10s;
+    client_header_timeout 10s;
+    send_timeout 15s;
+    gzip off;
+    location / { try_files $uri $uri/ =404; }
+    location ~ /\. { deny all; }
+    location ~ ^/(index|api)\.php$ {
+        include fastcgi_params;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        fastcgi_param HTTPS on;
+        fastcgi_pass unix:/run/php/php8.4-fpm.sock;
+        fastcgi_read_timeout 15s;
+    }
+    location ~ \.php$ { return 404; }
+}
+server {
+    listen 80;
+    server_name badge.example.com;
+    return 308 https://badge.example.com$request_uri;
+}
