@@ -18,6 +18,8 @@ try {
   await page.getByLabel('App-ID', {exact: true}).fill('energie');
   await page.getByLabel('Name auf dem Display').fill('Energie');
   await page.getByRole('button', {name: 'App speichern'}).click();
+  await page.locator('#token-dialog').waitFor({state: 'visible'});
+  const publisherToken = await page.locator('#new-token').inputValue();
   await page.getByRole('button', {name: 'Gesichert · schließen'}).click();
   await page.getByRole('button', {name: '+ Gerät hinzufügen', exact: true}).click();
   await page.getByLabel('Geräte-ID', {exact: true}).fill('flur');
@@ -71,6 +73,47 @@ try {
   await page.locator('#apps').getByRole('button', {name: 'Bearbeiten'}).click();
   assert.equal(await editor.getByLabel('Seitentitel', {exact: true}).inputValue(), 'Bitaxe');
   assert.equal(await editor.getByLabel('Wert', {exact: true}).inputValue(), '1100 GH/s');
+  // Bind a generic field, publish while editing, and keep both layout and data.
+  assert.equal(await page.locator('#app-mode').inputValue(), 'values');
+  await editor.locator('#row-0-type').selectOption('field');
+  await editor.locator('#row-0-field').fill('amount');
+  await editor.locator('#row-0-unit').fill('kg');
+  await editor.locator('#row-0-decimals').selectOption('2');
+  assert.equal(await editor.locator('#editor-preview-rows strong').first().textContent(), '--');
+  await page.getByRole('button', {name: 'App speichern', exact: true}).click();
+  await page.getByText('App gespeichert.', {exact: true}).waitFor();
+  await page.locator('#apps').getByRole('button', {name: 'Bearbeiten'}).click();
+  const headers = {Authorization: `Bearer ${publisherToken}`};
+  const status = await (await page.request.get('http://127.0.0.1:8080/api.php?r=app-status', {headers})).json();
+  const published = await page.request.post('http://127.0.0.1:8080/api.php?r=publish-values', {
+    headers, data: {version: status.data_version, values: {amount: 12.5}}
+  });
+  assert.equal(published.status(), 200);
+  await editor.getByLabel('Seitentitel', {exact: true}).fill('Inventory');
+  await page.getByRole('button', {name: 'App speichern', exact: true}).click();
+  await page.getByText('App gespeichert.', {exact: true}).waitFor();
+  await page.locator('#preview-title').getByText('Inventory', {exact: true}).waitFor();
+  assert.equal(await page.locator('#preview-title').textContent(), 'Inventory');
+  assert.equal(await page.locator('#preview-rows strong').first().textContent(), '12.50 kg');
+  await page.locator('#apps').getByRole('button', {name: 'Bearbeiten'}).click();
+  assert.equal(await editor.locator('#editor-preview-rows strong').first().textContent(), '12.50 kg');
+  assert.equal(await editor.locator('#row-0-field').inputValue(), 'amount');
+  await mkdir('test-results', {recursive: true});
+  await page.screenshot({path: 'test-results/bindings-desktop.png'});
+  await page.setViewportSize({width: 390, height: 844});
+  assert.equal(await page.locator('#app-dialog').evaluate(element => element.scrollWidth <= element.clientWidth), true);
+  await editor.locator('#row-0-field').scrollIntoViewIfNeeded();
+  await page.screenshot({path: 'test-results/bindings-mobile.png'});
+  await page.setViewportSize({width: 1280, height: 1000});
+  await page.locator('#app-mode').selectOption('pages');
+  assert.equal(await page.locator('#app-mode').inputValue(), 'values');
+  // Advanced JSON retains binding metadata and supports reimport.
+  await editor.getByText('Erweitert: JSON bearbeiten', {exact: true}).click();
+  const boundJson = await editor.getByLabel('Seiten und Werte (JSON)').inputValue();
+  assert.equal(JSON.parse(boundJson)[0].rows[0].field, 'amount');
+  await editor.getByLabel('Seiten und Werte (JSON)').fill(boundJson);
+  await editor.getByRole('button', {name: 'JSON übernehmen', exact: true}).click();
+  await editor.getByText('Erweitert: JSON bearbeiten', {exact: true}).click();
   // A full six-page import round-trips without losing fields or order.
   await editor.getByText('Erweitert: JSON bearbeiten', {exact: true}).click();
   const six = Array.from({length: 6}, (_, index) => ({title: `Seite ${index+1}`, rows: [{label: 'A', value: 'B'}]}));
@@ -101,5 +144,5 @@ try {
   await page.getByRole('button', {name: 'Abmelden', exact: true}).click();
   await page.getByRole('button', {name: 'Hub öffnen'}).waitFor();
   assert.deepEqual(errors, []);
-  console.log('Browser checks passed: login, app/device creation, assignment, live editor, ordering, limits, JSON round-trip, hidden-page validation, rotation, reload, logout, mobile overflow; no console errors.');
+  console.log('Browser checks passed: login, app/device creation, assignment, live editor, ordering, limits, JSON round-trip, hidden-page validation, data bindings, publishing during layout edits, mode guard, rotation, reload, logout, mobile overflow; no console errors.');
 } finally { await browser.close(); }

@@ -30,7 +30,7 @@ Node 24, Chromium 153 through Playwright. No Badger hardware was connected.
 Run from the repository root:
 
 ```bash
-php tests/server.php
+php tests/display.php
 python3 -m unittest discover -s tests -v
 node --check public/app.js
 node --check public/editor.js
@@ -55,6 +55,21 @@ production installation. Browser tooling is not a server dependency.
   It checks no blind replay. It does **not** load HA's integration schemas or run HA.
 - No production dependencies were added. Actual HA configuration validation and an
   end-to-end Bitaxe → HA → hub → Badger test remain installation acceptance steps.
+
+## Universal field bindings — 2026-10-04
+
+- 49 PHP checks (including the original 21) cover independent revisions, data/layout
+  interleaving, freshness, missing/null values, overflow, scalar validation, token
+  rotation, mode round-trips and idempotent migration of a v1 database.
+- 17 Python HTTP/device/transport tests include authenticated data publication,
+  stale versions, wrong endpoint/mode, invalid data and unchanged device row schema.
+- Chromium tests also publish generic numeric data while an editor is open, save
+  the layout without conflict, verify data preservation and binding JSON round-trip,
+  block an unsafe mode switch and check desktop/mobile overflow.
+- Optional YAML/Jinja checks cover value-only HA snapshots, initial revision zero,
+  wrong mode, invalid revisions, source failures and conflict handling.
+- PHP/JavaScript syntax and documentation links checked. No actual source devices,
+  production TLS deployment or Home Assistant runtime were available for acceptance.
 
 ## Required on a real Badger before unattended use
 

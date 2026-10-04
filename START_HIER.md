@@ -17,8 +17,8 @@ als normale Apps ausführen kann.
 8. Badger per USB betreiben. A öffnet/blättert, B aktualisiert, C führt ins Menü.
 
 **Dynamische Inhalte:** Ein PHP-Skript, Node-RED oder eine andere Datenquelle
-schickt Seiten und Werte per API an die registrierte App. `examples/publish.php`
-zeigt einen vollständigen PHP-Aufruf. Der Webservice wartet nie auf diese Quelle.
+schickt frei benannte Datenwerte per API an die registrierte App. Das Layout
+bleibt im Hub. `examples/publish-values.php` zeigt einen vollständigen PHP-Aufruf. Der Webservice wartet nie auf diese Quelle.
 
 **Bei Störungen:** Die letzte gültige Konfiguration bleibt verfügbar. Nach einem
 Watchdog-Neustart pausiert der Netzwerkzugriff bis B gedrückt wird. C beim Reset
@@ -42,6 +42,12 @@ Vollständige Installation und Betrieb: [README.md](README.md).
 Das Anlegen einer App startet noch keinen Datenlieferanten. Taste B liest den Hub,
 sie startet keine neue Messung an der Datenquelle.**
 
-**Neu: [Bitaxe und Home Assistant einrichten](docs/home-assistant-bitaxe.md).**
+**[Universelle Datenfelder einrichten](docs/data-fields.md)** — ohne Pflichtintegration.
+
+**Optionale Beispiele: [Bitaxe und Home Assistant einrichten](docs/home-assistant-bitaxe.md).**
 Formular-Seiteneditor mit Vorschau und optionalem JSON. Lokales Hosting ist möglich;
 kein PHP-Dauerprozess nötig. Das PHP-Beispiel läuft einmal, das HA-Paket jede Minute.
+
+**Neue Apps:** Layout im Hub, je Zeile fester Text oder frei benanntes Datenfeld.
+Einheiten und Nachkommastellen im Editor setzen. Bestehende Apps bleiben zunächst
+bei der bisherigen Seiten-API; die Doku erklärt die bewusste Umstellung.

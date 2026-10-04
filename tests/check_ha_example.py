@@ -28,7 +28,7 @@ def render(value, context):
         return {key: render(item, context) for key, item in value.items()}
     return value
 
-def run(app, source=None, sensor='21.4', status=200, publish_status=200):
+def run(app, source=None, sensor='21.4', status=200, publish_status=200, data_version=7, mode='values'):
     context = {'is_number': is_number, 'states': lambda entity: sensor}
     calls = []
     for step in package['script']['badger_publish_' + app]['sequence']:
@@ -43,19 +43,16 @@ def run(app, source=None, sensor='21.4', status=200, publish_status=200):
             if action.endswith('read_bitaxe'):
                 response = {'status': 200, 'content': source}
             elif action.endswith('_status'):
-                response = {'status': status, 'content': {'version': 7}}
+                response = {'status': status, 'content': {'data_version': data_version, 'publish_mode': mode}}
             else:
                 body = render(step['data'], context)
                 payload = render(package['rest_command'][action.split('.')[1]]['payload'], body)
                 if isinstance(payload, str):
                     payload = json.loads(payload)
-                assert payload['version'] == 7
-                for screen in payload['screens']:
-                    assert 1 <= len(screen['rows']) <= 3
-                    for row in screen['rows']:
-                        for key, limit in [('label', 14), ('value', 22)]:
-                            assert isinstance(row[key], str) and 1 <= len(row[key]) <= limit
-                            assert all(32 <= ord(char) <= 126 for char in row[key])
+                assert payload['version'] == data_version
+                assert 'screens' not in payload
+                assert set(payload['values']) == ({'hash_rate', 'temperature', 'power'} if app == 'bitaxe' else {'temperature', 'humidity'})
+                assert all(is_number(value) for value in payload['values'].values())
                 calls.append(payload)
                 response = {'status': publish_status, 'content': {}}
             context[step['response_variable']] = response
@@ -66,12 +63,15 @@ for app in ['bitaxe', 'home']:
     calls, success = run(app, valid)
     assert success and len(calls) == 1
     assert not run(app, valid, status=401)[0]
+    assert not run(app, valid, mode='pages')[0]
+    assert not run(app, valid, data_version=-1)[0]
+    assert run(app, valid, data_version=0)[1]
     calls, success = run(app, valid, publish_status=409)
     assert len(calls) == 1 and success is None  # No replay after conflict.
 for invalid in [None, {}, 'bad response', {**valid, 'power': 'unknown'}, {**valid, 'temp': 999}]:
     assert not run('bitaxe', invalid)[0]
 for sensor in ['unknown', 'unavailable', 'nan', 'inf', '999']:
     assert not run('home', sensor=sensor)[0]
-assert run('bitaxe', valid)[0][0]['screens'][0]['rows'][0]['value'] == '1100.5 GH/s'
-assert run('home')[0][0]['screens'][0]['rows'][1]['value'] == '21 %'
+assert run('bitaxe', valid)[0][0]['values']['hash_rate'] == 1100.5
+assert run('home')[0][0]['values']['humidity'] == 21.4
 print('HA example: YAML, templates, display bounds, missing sources and rejected publishes checked')

@@ -13,7 +13,8 @@ values through a scoped API. Adding a display app does not require new firmware.
 
 The German administration includes app/device registration, assignments,
 activation, deletion, key rotation, a form-based page editor with live preview,
-advanced JSON import/export and an audit trail.
+advanced JSON import/export and an audit trail. **Layouts stay in the hub; generic
+publishers send only named values. Static text and data fields can share a page.**
 
 ## Installation and usage guides
 
@@ -26,6 +27,7 @@ advanced JSON import/export and an audit trail.
 
 **Recommended order: install the server → register a sample app and device → configure the Badger → add an independent data producer.**
 
+- **[Connect any data source](docs/data-fields.md)** — generic fields, formatting, one-shot PHP publisher and migration from whole-page publishing.
 - **[Bitaxe and Home Assistant setup](docs/home-assistant-bitaxe.md)** — ready-to-adapt HA package, local or shared hosting, scheduled updates and troubleshooting.
 
 **No persistent PHP CLI process is needed. The PHP demo runs once; the included
@@ -43,7 +45,8 @@ of the device or hosting configuration. See [verification](docs/verification.md)
 
 1. An administrator registers an app and receives a publisher token once.
 2. A trusted producer (PHP script, Node-RED, Home Assistant automation, etc.) pushes
-   complete display pages to that app. It cannot modify other apps or devices.
+   named data values to that app. Its layout is managed independently in the hub.
+   Publishers cannot modify hub-managed layouts, other apps or devices.
 3. The administrator registers a device and assigns up to ten apps.
 4. The device downloads a bounded JSON manifest with only its assigned active apps.
 5. All menu navigation works locally, including with no network.
@@ -55,13 +58,13 @@ domain-specific integrations remain producer responsibilities.
 
 ### Push upstream, pull on the device
 
-**The producer pushes pages to the hub; the Badger pulls a stored snapshot on its timer or with B. This keeps source collection outside device requests. App registration does not start a producer, and B does not trigger a fresh source measurement.**
+**The producer pushes values to the hub; the Badger pulls a stored snapshot on its timer or with B. This keeps source collection outside device requests. App registration does not start a producer, and B does not trigger a fresh source measurement.**
 
 ```mermaid
 flowchart TD
     Source["Data source"] -->|"Event or scheduled read"| Producer["Independent producer"]
-    Producer -->|"Publish pages"| Hub["PHP hub"]
-    Admin["Web administration"] -->|"Register and assign"| Hub
+    Producer -->|"Publish values"| Hub["PHP hub"]
+    Admin["Web administration"] -->|"Edit layouts and assign"| Hub
     Hub -->|"Save validated data"| Store[("SQLite")]
     Store -->|"Read snapshot"| Hub
     Badge["Badger"] -->|"GET manifest: timer or B"| Hub
@@ -219,14 +222,35 @@ USB and battery. Adding battery mode requires hardware validation of that lifecy
 
 Full protocol and status codes: [API documentation](docs/api.md).
 
-`examples/publish.php` is a complete PHP CLI publisher using ext-curl. Set
-`BADGER_URL` and `BADGER_APP_TOKEN` in the producer's secure environment and replace
-its sample values with your data source. Invoke it from a scheduler or automation.
-No credentials go in URLs. Do not run a producer on every device request.
+**Start with [the universal data-field guide](docs/data-fields.md).** In the editor,
+choose hub-managed layout and bind rows to field names of your choice. Publishers
+send `{"version":0,"values":{"temperature":21.5}}` to `publish-values`, using the
+current `data_version` from `app-status`. Layout and data revisions are independent.
+
+`examples/publish-values.php` reads one JSON object from stdin and exits after a
+bounded HTTPS exchange. Set `BADGER_URL` and `BADGER_APP_TOKEN` privately and run
+`php examples/publish-values.php < examples/values.json`. It requires ext-curl only
+on the producer machine. Import `examples/layout.json` into a hub-managed app for
+the matching generic demo. Invoke from any scheduler or use the HTTP API from
+another language. Home Assistant, Bitaxe and Node-RED are optional examples.
+
+Existing `pages` apps and `examples/publish.php` retain whole-page publishing;
+they are not silently converted. See the guide for deliberate migration. Tokens
+never belong in URLs. Do not collect source data during device requests.
 
 Apps have 1–6 pages, each with 1–3 label/value rows. Version 1 deliberately uses
 printable ASCII because the built-in bitmap font is not a Unicode renderer. Use
 `Waerme`, `deg C` and `ug/m3`. The UI validates these limits server-side too.
+
+## Updating existing installations
+
+**Back up first.** Temporarily pause writers, deploy all application files together,
+then access the API. Database schema v1 migrates transactionally to v2 on the first
+connection, with bounded SQLite locking. No CLI migration or background worker is
+required. Existing apps, keys, assignments and pages are preserved in legacy mode.
+Reload browser assets after the update. Device manifest schema remains 1.
+Downgrade requires restoring the matching database backup; do not run old code
+against the migrated database. See [server update steps](docs/installation-server.md#update-auf-layoutdaten-trennung).
 
 ## Maintenance
 
@@ -255,9 +279,10 @@ Wi-Fi password and device token.
 ## Tests
 
 ```bash
-php tests/server.php
+php tests/display.php
 python3 -m unittest discover -s tests -v
 node --check public/app.js
+node --check public/editor.js
 ```
 
 Python 3 is needed only for automated tests and the MicroPython device code, not

@@ -1,5 +1,15 @@
 # Changelog
 
+## Universal data-bound layouts — 2026-10-04
+
+- Separate generic data snapshots from hub-managed layouts and admin revisions.
+- Add scoped `publish-values`, scalar validation, explicit missing/overflow rendering.
+- Add per-row field bindings, units, decimals and latest-value preview to the editor.
+- Preserve legacy page publishers; migrate schema v1 transactionally without CLI.
+- Keep device manifest schema 1 and existing device firmware compatible.
+- Add generic JSON/PHP examples; adapt optional HA/Bitaxe examples to values only.
+- Document upgrade, mode conversion, independent revisions and freshness semantics.
+
 ## Page editor and integration examples — 2026-10-04
 
 - Added form-based page/row editing, page ordering, limits and live preview.

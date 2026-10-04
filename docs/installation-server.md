@@ -170,3 +170,25 @@ aktualisieren. `var` und eigene Publisher-Konfigurationen erhalten. Nicht erneut
 Setup ausführen. Automatisierungen und Gerät danach einmal prüfen.
 
 Weiter: [Badger einrichten](installation-badger.md) · [Hub benutzen](usage.md).
+
+## Update auf Layout/Daten-Trennung
+
+**Vorher eine konsistente Datenbank- und Konfigurationssicherung erstellen.**
+
+1. Publisher pausieren und Webzugriffe während des Dateiaustauschs kurz sperren
+   (Wartungsfunktion des Hosters). Programmdateien vollständig als eine Version
+   austauschen, einschließlich `src/display.php` und `public/editor.js`.
+2. `var`, private Konfiguration, Schlüssel und Datenbank erhalten. Setup nicht erneut
+   ausführen. Der PHP-Benutzer braucht weiterhin Schreibrechte auf das Datenverzeichnis.
+3. Zugriffe wieder zulassen und Oberfläche neu laden. Bei der ersten API-Verbindung
+   migriert Schema 1 automatisch und transaktional auf Schema 2. Das SQLite-Zeitlimit
+   bleibt aktiv; bei belegter Datenbank kann HTTP 503 auftreten. Nach Ende konkurrierender
+   Zugriffe erneut versuchen. Kein CLI-Migrationsjob und keine Dauerschleife erforderlich.
+4. Bestehende Apps, Seiten, Schlüssel und Zuweisungen kontrollieren. Sie bleiben in
+   der bisherigen Betriebsart **Im Publisher**. Alte Publisher dürfen wieder starten.
+5. Apps einzeln gemäß [Umstellungsanleitung](data-fields.md#5-versionskonflikte-und-umstellung-bestehender-apps)
+   auf die Werte-API umstellen. Neue Apps im Webeditor verwenden standardmäßig **Im Hub**.
+
+Die Geräte-API bleibt bei Schema 1; diese Änderung erfordert kein Geräteupdate.
+Für ein Rollback die gesicherte Datenbank **und** den dazu passenden alten Programmstand
+wiederherstellen. Eine bereits migrierte Datenbank nicht mit altem Code betreiben.

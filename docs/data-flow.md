@@ -9,7 +9,7 @@ requests. No transport change is needed for the current use case.
 
 An **app** is a registered set of display pages, not an executable application
 that the hub downloads or runs. A **producer** is the script or automation which
-obtains source values and publishes those pages. Registering an app alone does
+obtains source values and publishes named data fields. The hub manages layouts. Registering an app alone does
 not start a producer or schedule updates.
 
 ## Components and direction
@@ -20,9 +20,9 @@ All network connections shown are HTTPS. SQLite and device cache accesses are lo
 ```mermaid
 flowchart TD
     Source["Data source"] -->|"Event or scheduled source read"| Producer["Producer / PHP script"]
-    Producer -->|"GET app-status; POST publish"| Hub["PHP hub"]
-    Admin["Web administration"] -->|"Register apps; assign devices"| Hub
-    Hub -->|"Validate and store pages"| DB[("SQLite snapshot")]
+    Producer -->|"GET app-status; POST publish-values"| Hub["PHP hub"]
+    Admin["Web administration"] -->|"Edit layouts; assign devices"| Hub
+    Hub -->|"Validate and store values/layouts"| DB[("SQLite snapshot")]
     DB -->|"Read assigned active apps"| Hub
     Badge["Badger client"] -->|"GET manifest: timer or B"| Hub
     Hub -->|"JSON response"| Badge
@@ -50,8 +50,8 @@ sequenceDiagram
     participant D as SQLite
     participant B as Badger
     P->>H: GET app-status with publisher token
-    H-->>P: Current app version
-    P->>H: POST publish with version and pages
+    H-->>P: Current data_version and mode
+    P->>H: POST publish-values with data version and values
     H->>D: Validate and conditionally update
     alt Version matches
         D-->>H: Commit new snapshot
@@ -74,7 +74,11 @@ sequenceDiagram
 The manifest is a latest-state snapshot, **not a message queue**. If a producer
 publishes three updates between device polls, the badge sees the most recent
 stored update. It does not replay every intermediate event. Repeated publishing
-replaces pages; it does not append a notification history.
+replaces the data snapshot; it does not append a notification history.
+Layout and data revisions are independent: an editor save preserves the newest
+values, and a data publish preserves the layout. The hub formats rows when reading
+the manifest; the device protocol does not change. Legacy whole-page publishing
+remains available only for apps explicitly in `pages` mode.
 
 ## Why this choice fits
 
@@ -119,11 +123,12 @@ of 60 seconds, badge interval of 300 seconds and TTL of 900 seconds for a period
 status display. These are example settings, not optimized battery values; the
 current client stays powered on.
 
-`updated_at` is **server receipt time**, not source measurement time. A producer
+For bound apps, `updated_at` is **data receipt time** (zero before the first publish), not source measurement time. A producer
 must not repeatedly send an unchanged *old measurement* and claim it is fresh.
 On source failure, stop publishing a normal successful snapshot; allow TTL to
-expire, or explicitly publish a source-error page. Include a measurement-time row
-when its age matters. A newly measured unchanged value may of course be published.
+expire, or explicitly publish an error/status value. Include a measurement-time row
+when its age matters. Layout edits do not reset data age. Static-only apps use
+the last manual save time. A newly measured unchanged value may of course be published.
 
 ## Failure and recovery semantics
 

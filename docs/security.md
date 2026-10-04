@@ -62,3 +62,15 @@ Development-only browser tooling is not included in the deployed app.
 
 Review the hardware acceptance checklist and hosting settings before unattended
 use. No real-hardware test or external penetration test is claimed.
+
+## Data-bound layouts
+
+Hub-managed apps accept bounded scalar snapshots through `publish-values`. Publisher
+tokens cannot write their layouts. Field bindings are literal identifiers, not code,
+expressions or URLs. Data and layout revisions are separate; data writes atomically
+check revision, current token, enabled state and mode. Mode changes clear stored
+values and advance their revision. Legacy page publishing is restricted to `pages`
+mode. Missing fields become placeholders and display overflow is explicit.
+
+Schema v1 upgrades are transactional under the existing bounded SQLite write lock.
+No network I/O or session lock is held during migration. Back up before deployment.

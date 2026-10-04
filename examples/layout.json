@@ -1,0 +1,10 @@
+[
+  {
+    "title": "Messwerte",
+    "rows": [
+      {"label": "Temperatur", "field": "temperature", "unit": "deg C", "decimals": 1},
+      {"label": "Status", "field": "status", "unit": "", "decimals": 0},
+      {"label": "Ort", "value": "Raum 1"}
+    ]
+  }
+]

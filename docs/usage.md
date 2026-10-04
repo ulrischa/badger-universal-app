@@ -9,7 +9,7 @@ reicht die Weboberfläche; ein externer Datenlieferant ist noch nicht erforderli
 2. App-ID `energie` und Displayname `Energie` eintragen. Die ID ist nach dem
    Anlegen nicht mehr über die Oberfläche veränderbar.
 3. App aktiv lassen. Als TTL beispielsweise `900` Sekunden wählen.
-4. Im **Seiteneditor** den Seitentitel und die Zeilen mit Bezeichnung/Wert ausfüllen.
+4. **Layout-Verwaltung auf „Im Hub“ lassen.** Im **Seiteneditor** den Seitentitel und die Zeilen mit Bezeichnung/Wert ausfüllen.
    Beispielsweise `Energie heute`, `PV` / `5.8 kW`, `Akku` / `84 %`.
    „Zeile hinzufügen“ ergänzt bis zu drei Zeilen; „Seite hinzufügen“ bis zu sechs Seiten.
    Über die Seitenauswahl wechseln, mit „Seite nach vorne“/„Seite nach hinten“ umsortieren.
@@ -26,6 +26,8 @@ vor dem Speichern geprüft. Die letzte Seite und die letzte Zeile bleiben erhalt
 
 Es sind Beispielwerte, keine Verbindung zu deiner PV-Anlage. Eine App ist hier
 ein Datensatz mit Anzeigeseiten. Erst ein eigener Publisher liefert echte Werte.
+**Pro Zeile kannst du auch „Datenfeld“ wählen und frei benannte Werte verknüpfen;
+siehe [universelle Datenfelder](data-fields.md).**
 Wenn du Inhalte nur von Hand pflegst, brauchst du den Publisher-Schlüssel nicht
 im laufenden Betrieb; der Administrator kann über die Oberfläche speichern.
 
@@ -72,64 +74,38 @@ Bei einem Versionskonflikt wurden zwischenzeitlich Daten geändert. Eigene Einga
 bei Bedarf separat sichern, die Liste neu laden und den aktuellen Stand prüfen,
 bevor du erneut bearbeitest. Nicht blind über neuere Werte speichern.
 
-## 5. Dynamische Daten per PHP liefern
+## 5. Universelle dynamische Daten liefern
 
-**Das Beispiel läuft einmal und beendet sich; es installiert keinen Zeitplan.**
-Für deine konkreten Geräte: [Bitaxe und Home Assistant Schritt für Schritt](home-assistant-bitaxe.md).
+**Empfohlen: Layout im Hub, nur Daten im Publisher.** Der [Datenfelder-Leitfaden](data-fields.md)
+zeigt die Einrichtung ohne Home Assistant oder andere Pflichtsysteme, ein generisches
+JSON-Beispiel und die Migration vorhandener Apps.
 
-`examples/publish.php` liest die aktuelle App-Version und veröffentlicht danach
-vollständige Seiten. Es benötigt PHP CLI mit `ext-curl` und läuft auf einem Rechner,
-der den Hub und die jeweilige Quelle erreichen kann. Das kann auch ein Raspberry
-Pi im Heimnetz oder ein separater Cronjob auf dem Webserver sein.
+1. In der App **Layout-Verwaltung → Im Hub** wählen.
+2. Pro dynamischer Zeile **Inhalt → Datenfeld**, Feldname, Einheit und
+   Nachkommastellen setzen. Feste Texte können daneben stehen.
+3. Publisher: `GET app-status`, dann `POST publish-values` mit
+   `{"version":DATA_VERSION,"values":{"temperature":21.5}}`.
+4. `data_version` aus der Statusantwort verwenden, nicht die Layout-`version`.
+5. Im Hub Liste neu laden; auf dem Badger B drücken oder Abruf abwarten.
 
-Zum einmaligen Test in Bash:
+`examples/publish-values.php` nimmt ein JSON-Objekt von stdin entgegen und läuft
+**einmal**. `examples/values.json` enthält generische Testdaten, `examples/layout.json`
+das passende Layout. Für regelmäßige Updates startet ein Scheduler oder eine
+vorhandene Automatisierung den Publisher. Der Hub startet keinen Hintergrundprozess.
+PHP ist als Publisher-Sprache optional; jedes System mit HTTPS/JSON kann senden.
 
-```bash
-export BADGER_URL='https://badge.example.com'
-read -rsp 'Publisher-Schlüssel: ' BADGER_APP_TOKEN
-printf '\n'
-export BADGER_APP_TOKEN
-php examples/publish.php
-unset BADGER_APP_TOKEN BADGER_URL
-```
+Bestehende Apps in **Im Publisher – komplette Seiten** behalten ihre bisherige API:
+`GET app-status` liefert `version`, `POST publish` erhält `{version,screens}`.
+`examples/publish.php` sendet einmal feste Demo-Seiten. Nur in dieser Betriebsart
+kann der Publisher Editoränderungen überschreiben. Die neue Werte-API kann das nicht.
 
-Erwartete Ausgabe: `Published version ...`. Danach B drücken. Im Beispiel werden
-feste Demo-Werte gesendet. Für echte Daten die Quelle im eigenen Publisher auslesen
-und `$screens` damit füllen. Änderungen im Beispiel in einer eigenen privaten
-Kopie vornehmen, damit ein Projektupdate sie nicht überschreibt.
+Der JSON-Editor enthält das Layout-Seitenarray; eine Werteveröffentlichung enthält
+dagegen das Objekt mit `version` und `values`. Nicht miteinander verwechseln.
+Für beide APIs gilt: bei HTTP 409 neu lesen und entscheiden; nach Timeout kann
+bereits gespeichert worden sein. Keine blinden oder unbegrenzten Wiederholungen.
+Eine erfolgreiche Veröffentlichung bestätigt noch keine Anzeige auf dem Badger.
 
-Für regelmäßige Aktualisierung:
-
-1. Einen eigenen Publisher erstellen und manuell testen.
-2. Schlüssel in der privaten Umgebung des Schedulers bereitstellen. Nicht in
-   URLs, öffentlich abgelegten Dateien oder Befehlszeilen mit sichtbaren Tokens speichern.
-3. Beispielsweise alle 60 Sekunden starten. Keine überlappenden Ausführungen;
-   Datenquellen ebenfalls mit Zeitlimits abfragen.
-4. Fehler im Scheduler beobachten. Bei fehlenden Quelldaten nicht einfach alte
-   Messwerte als frisch veröffentlichen.
-5. Prüfen, dass sich Messzeit und Werte im Hub tatsächlich aktualisieren.
-
-Der Hub führt den Publisher nicht selbst aus. Der Cronjob ist vom Webrequest des
-Badgers unabhängig. Fehlt ein Scheduler, bleibt die zuletzt gespeicherte Seite
-stehen und wird nach Ablauf der TTL als alt gekennzeichnet.
-
-### Andere Automatisierungen
-
-Node-RED, Home Assistant oder JavaScript können dieselbe [HTTP-API](api.md) verwenden:
-
-1. `GET /api.php?r=app-status`, Header `Authorization: Bearer APP_TOKEN`.
-2. Antwortfeld `version` übernehmen.
-3. `POST /api.php?r=publish` mit demselben Header und `Content-Type: application/json`.
-4. Body: Objekt mit `version` und `screens` (dem Seitenarray aus Schritt 1).
-
-Der JSON-Editor der Verwaltung enthält **nur das Seitenarray**; die Publisher-API
-erwartet dagegen **ein Objekt mit `version` und `screens`**. Publisher dürfen ihre
-eigenen Seiten ersetzen, aber keine anderen Apps oder Geräte verändern.
-
-HTTP 409 bedeutet Versionskonflikt: neu lesen und entscheiden. Nach einem Timeout
-kann das Speichern bereits erfolgt sein. Nicht unbegrenzt oder blind wiederholen.
-Eine erfolgreiche Veröffentlichung ist noch keine Bestätigung, dass ein Badger
-sie bereits angezeigt hat.
+[API-Vertrag](api.md) · [Optionale Beispiele: Bitaxe und Home Assistant](home-assistant-bitaxe.md)
 
 ## 6. Intervalle und Aktualität verstehen
 
@@ -137,7 +113,7 @@ sie bereits angezeigt hat.
 |---|---|
 | Publisher-Intervall | Häufigkeit neuer Quelldaten im Hub; außerhalb des Hubs eingestellt |
 | Geräteintervall | Häufigkeit des Manifest-Abrufs; pro Gerät eingestellt |
-| TTL | Alter ab Serverempfang, ab dem App-Daten als alt gelten; pro App eingestellt |
+| TTL | Alter ab Datenempfang für gebundene Apps, sonst ab Seitenspeicherung; pro App eingestellt |
 | Letzter Gerätekontakt | Letzter authentifizierter Manifest-Aufruf, keine Renderbestätigung |
 
 Bei 60 Sekunden Quellenabfrage und 300 Sekunden Geräteintervall kann eine Änderung
@@ -182,5 +158,5 @@ Verlorene Einmalschlüssel lassen sich nicht wieder anzeigen; einen neuen erzeug
 
 Zurück: [README](../README.md) · [Serverinstallation](installation-server.md) · [Badgerinstallation](installation-badger.md).
 
-**Automatisch belieferte Apps:** Ein Publisher ersetzt alle Seiten beim nächsten
-Senden. Ihr Layout im Publisher ändern; statische Notizen als eigene App führen.
+**Layout und Daten sind im Hub-Modus getrennt.** Editoränderungen bleiben bei neuen
+Messwerten erhalten und machen alte Messwerte nicht wieder frisch.

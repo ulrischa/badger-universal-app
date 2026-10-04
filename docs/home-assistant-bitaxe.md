@@ -1,9 +1,13 @@
 # Bitaxe und Home Assistant Schritt für Schritt
 
+**Diese Anleitung zeigt zwei optionale Anwendungen der [universellen Daten-API](data-fields.md).
+Der Hub enthält keine HA-/Bitaxe-Sonderlogik und benötigt Home Assistant nicht.**
+
 ## Was läuft wann?
 
-`examples/publish.php` läuft **genau einmal**, sendet feste Beispielwerte und beendet
-sich. Es installiert keinen Zeitplan. Der PHP-Webservice arbeitet nur bei
+`examples/publish-values.php` liest ein Datenobjekt von stdin; `examples/publish.php`
+sendet Demo-Seiten für die bisherige API. Jedes Skript läuft **genau einmal** und
+beendet sich. Es installiert keinen Zeitplan. Der PHP-Webservice arbeitet nur bei
 HTTP-Anfragen; er benötigt keinen PHP-Daemon, Worker oder laufenden CLI-Prozess.
 Setup und Wartung sind ebenfalls einzelne Aufrufe.
 
@@ -34,8 +38,8 @@ weder PHP CLI auf Home Assistant noch ein Cronjob auf dem Webhoster erforderlich
 flowchart TD
     X["Bitaxe im LAN"] -->|"Antwort auf lokale Abfrage"| H["Home Assistant: jede Minute"]
     S["HA-Sensorzustände"] --> H
-    H -->|"Version lesen, Seiten per HTTPS senden"| U["PHP-Hub und SQLite"]
-    E["Browser-Seiteneditor"] -->|"Manuelle Seiten"| U
+    H -->|"Datenversion lesen, Werte per HTTPS senden"| U["PHP-Hub und SQLite"]
+    E["Browser-Seiteneditor"] -->|"Layout bearbeiten"| U
     U -->|"Gespeichertes Manifest auf Anfrage"| B["Badger: regelmäßiger Abruf"]
 ```
 
@@ -46,9 +50,19 @@ externem Hosting nicht aus dem Internet erreichbar gemacht werden.
 ## 2. Zwei Apps registrieren
 
 1. Im Hub **App registrieren**: ID `bitaxe`, Name `Bitaxe`, aktiv, TTL `300` Sekunden.
-2. Im Seiteneditor Titel `Bitaxe`, eine Zeile `Status` / `Warte auf Daten` setzen.
+   **Layout-Verwaltung: Im Hub – Publisher liefert nur Daten.**
+2. Im Seiteneditor Titel `Bitaxe`, drei Zeilen mit **Inhalt → Datenfeld** anlegen:
+
+   | Bezeichnung | Datenfeld | Einheit | Nachkommastellen |
+   |---|---|---|---|
+   | Hashrate | `hash_rate` | `GH/s` | 1 |
+   | Temperatur | `temperature` | `deg C` | 1 |
+   | Leistung | `power` | `W` | 1 |
+
 3. Speichern und den einmalig angezeigten **Publisher-Schlüssel** sichern.
-4. Zweite App: ID `home`, Name `Zuhause`, ebenfalls aktiv und TTL `300`.
+4. Zweite App: ID `home`, Name `Zuhause`, ebenfalls aktiv, TTL `300`, Layout **Im Hub**.
+   Zwei Datenfeld-Zeilen: `temperature` mit Einheit `deg C`, 1 Nachkommastelle;
+   `humidity` mit Einheit `%`, 0 Nachkommastellen.
 5. Auch deren separaten Publisher-Schlüssel sichern.
 
 Die Tokens bestimmen die Ziel-App; die App-ID wird nicht im Publish-Body übergeben.
@@ -89,7 +103,7 @@ Vor Änderungen die HA-Konfiguration sichern.
    | Schlüssel | Dein Wert |
    |---|---|
    | `badger_status_url` | `https://DEIN-HUB/api.php?r=app-status` |
-   | `badger_publish_url` | `https://DEIN-HUB/api.php?r=publish` |
+   | `badger_publish_url` | `https://DEIN-HUB/api.php?r=publish-values` |
    | `badger_bitaxe_url` | `http://DEINE-BITAXE-IP/api/system/info` |
    | `badger_bitaxe_authorization` | `Bearer ` gefolgt vom Bitaxe-Publisher-Schlüssel |
    | `badger_home_authorization` | `Bearer ` gefolgt vom Zuhause-Publisher-Schlüssel |
@@ -104,7 +118,7 @@ Vor Änderungen die HA-Konfiguration sichern.
 2. `http://DEINE-BITAXE-IP/api/system/info` im eigenen Netz prüfen. Die ESP-Miner-API
    liefert `hashRate` (GH/s), `temp` (Chiptemperatur) und `power` (Watt).
    Die konkrete Firmware muss diese Felder als Zahlen liefern.
-3. Das Beispiel überträgt daraus drei Zeilen: Hashrate, Temperatur und Leistung.
+3. Das Beispiel sendet drei Zahlenfelder; der Hub setzt sie in dein Layout ein.
    Bitaxe-HTTP ist ausschließlich für das vertrauenswürdige lokale Netz vorgesehen;
    keine Portfreigabe zum Bitaxe einrichten.
 4. HA-Konfiguration prüfen, anschließend Home Assistant neu starten.
@@ -133,8 +147,8 @@ Es gibt keine Endlosschleife. Fehler stehen im HA-Skript-/Automations-Trace.
 3. Konfiguration prüfen und HA neu starten; `script.badger_publish_home` manuell
    ausführen. „Zuhause“ im Hub prüfen, B am Badger drücken.
 4. Die zweite Automation sendet danach jede Minute. Für PV, Akkustand oder andere
-   Werte die Variablen, Zahlenprüfung und den `screens`-Abschnitt dieses Skripts
-   gemeinsam anpassen. Bis zu sechs Seiten mit je drei Zeilen sind möglich.
+   Werte die Variablen, Zahlenprüfung und den `snapshot`-Abschnitt dieses Skripts
+   gemeinsam anpassen. Die entsprechenden Datenfelder im Hub-Editor zuweisen. Bis zu sechs Seiten mit je drei Zeilen sind möglich.
 
 `unknown`/`unavailable` werden nicht in Null umgewandelt. Bei ungültigen Werten
 bleibt die vorherige Seite bestehen. Ein Sensor, dessen Integration einen alten
@@ -144,11 +158,17 @@ solche Zustände liefern kann. TTL misst den Serverempfang, nicht den Messzeitpu
 
 ## 7. Seiten gestalten und Betrieb prüfen
 
-Der neue Editor kann Titel, Zeilen, Seitenreihenfolge und Vorschau ohne JSON bearbeiten.
-**Eine laufende Automation ersetzt die vollständigen Seiten ihrer App beim nächsten
-Publish.** Für dynamische Apps deshalb Layout und Beschriftungen im YAML-Abschnitt
-`screens` ändern. Der Editor ist kein Template mit Sensor-Platzhaltern. Statische
-Notizen am besten als separate App ohne Publisher führen.
+Der Editor verwaltet Titel, Zeilen, Einheiten und Reihenfolge unabhängig von den
+Daten. **Die Automation überschreibt keine Layoutänderungen mehr.** Sie sendet nur
+den vollständigen `values`-Snapshot. Statische Texte können auf derselben Seite
+bleiben. Fehlende Felder erscheinen als `--`; Überlänge nach Formatierung als
+`OVERFLOW`. Einheiten werden angehängt, nicht umgerechnet.
+
+Wenn du das frühere Paket schon installiert hast: Automationen pausieren, beide
+Apps auf **Im Hub** umstellen und die oben genannten Datenfelder anlegen. Paket
+aktualisieren und in `secrets.yaml` die Publish-URL auf `publish-values` ändern.
+Konfiguration prüfen, HA neu starten, beide Skripte testen, Automationen aktivieren.
+Der neue Publisher liest `data_version`; das alte Seitenformat ist damit inkompatibel.
 
 Jedes Skript läuft mit `mode: single`: Ein laufender Durchlauf wird nicht parallel
 nochmals gestartet. GET und POST haben jeweils fünf Sekunden Timeout. Bei HTTP 409
@@ -159,7 +179,7 @@ betreiben. Nach einem Timeout kann ein POST bereits gespeichert worden sein.
 | Beobachtung | Prüfung |
 |---|---|
 | HTTP 401 | Passender Publisher-Token, Leerzeichen nach `Bearer`, App aktiv? |
-| HTTP 409 | Gleichzeitige Editoränderung oder zweiter Publisher? |
+| HTTP 409 | Falsche Betriebsart, alter Publisher oder zweiter Daten-Publisher? |
 | HTTP 422 | ASCII, Textlängen und Seitenstruktur prüfen |
 | SSL-Fehler | DNS, Zertifikatsname, CA und Uhrzeit prüfen |
 | Hub aktuell, Badger alt | App-Zuweisung, Gerätetoken, B, WLAN und CA prüfen |

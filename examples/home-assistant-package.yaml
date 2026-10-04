@@ -20,7 +20,7 @@ rest_command:
     headers:
       authorization: !secret badger_bitaxe_authorization
     content_type: application/json
-    payload: "{{ {'version': version | int, 'screens': screens} | to_json }}"
+    payload: "{{ {'version': version | int, 'values': values} | to_json }}"
   badger_home_status:
     url: !secret badger_status_url
     method: GET
@@ -36,7 +36,7 @@ rest_command:
     headers:
       authorization: !secret badger_home_authorization
     content_type: application/json
-    payload: "{{ {'version': version | int, 'screens': screens} | to_json }}"
+    payload: "{{ {'version': version | int, 'values': values} | to_json }}"
 
 script:
   badger_publish_bitaxe:
@@ -51,7 +51,7 @@ script:
              or not is_number(source.content.get('temp'))
              or not is_number(source.content.get('power')) }}
         then:
-          - stop: Bitaxe response missing or invalid; previous pages retained
+          - stop: Bitaxe response missing or invalid; previous values retained
             error: true
       - variables:
           hash_rate: "{{ source.content.hashRate | float }}"
@@ -64,28 +64,24 @@ script:
           - stop: Bitaxe values outside display bounds
             error: true
       - variables:
-          screens:
-            - title: Bitaxe
-              rows:
-                - label: Hashrate
-                  value: "{{ '%.1f GH/s' | format(hash_rate) }}"
-                - label: Temperatur
-                  value: "{{ '%.1f deg C' | format(temperature) }}"
-                - label: Leistung
-                  value: "{{ '%.1f W' | format(power) }}"
+          snapshot:
+            hash_rate: "{{ hash_rate }}"
+            temperature: "{{ temperature }}"
+            power: "{{ power }}"
       - action: rest_command.badger_bitaxe_status
         response_variable: current
       - if: >-
           {{ current.status != 200 or current.content is not mapping
-             or current.content.get('version') is not integer
-             or current.content.version < 1 }}
+             or current.content.get('data_version') is not integer
+             or current.content.data_version < 0
+             or current.content.get('publish_mode') != 'values' }}
         then:
           - stop: Hub version unavailable; no publish attempted
             error: true
       - action: rest_command.badger_bitaxe_publish
         data:
-          version: "{{ current.content.version }}"
-          screens: "{{ screens }}"
+          version: "{{ current.content.data_version }}"
+          values: "{{ snapshot }}"
         response_variable: published
       - if: "{{ published.status != 200 }}"
         then:
@@ -105,7 +101,7 @@ script:
       - if: >-
           {{ not is_number(temperature_state) or not is_number(humidity_state) }}
         then:
-          - stop: Home Assistant sensors unavailable; previous pages retained
+          - stop: Home Assistant sensors unavailable; previous values retained
             error: true
       - variables:
           temperature: "{{ temperature_state | float }}"
@@ -115,26 +111,23 @@ script:
           - stop: Home Assistant values outside display bounds
             error: true
       - variables:
-          screens:
-            - title: Zuhause
-              rows:
-                - label: Temperatur
-                  value: "{{ '%.1f deg C' | format(temperature) }}"
-                - label: Luftfeuchte
-                  value: "{{ '%.0f %%' | format(humidity) }}"
+          snapshot:
+            temperature: "{{ temperature }}"
+            humidity: "{{ humidity }}"
       - action: rest_command.badger_home_status
         response_variable: current
       - if: >-
           {{ current.status != 200 or current.content is not mapping
-             or current.content.get('version') is not integer
-             or current.content.version < 1 }}
+             or current.content.get('data_version') is not integer
+             or current.content.data_version < 0
+             or current.content.get('publish_mode') != 'values' }}
         then:
           - stop: Hub version unavailable; no publish attempted
             error: true
       - action: rest_command.badger_home_publish
         data:
-          version: "{{ current.content.version }}"
-          screens: "{{ screens }}"
+          version: "{{ current.content.data_version }}"
+          values: "{{ snapshot }}"
         response_variable: published
       - if: "{{ published.status != 200 }}"
         then:

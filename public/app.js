@@ -39,7 +39,7 @@ function notice(message, error = false) {
 async function run(task, form = null) {
   if (busy) return;
   busy = true;
-  pageEditor.setLocked(true);
+  pageEditor.setLocked(true); $('app-mode').disabled = true;
   const buttons = [...document.querySelectorAll('button')].filter(button => !button.disabled);
   buttons.forEach(button => { button.disabled = true; });
   if (form) form.querySelector(':scope > .form-error')?.replaceChildren();
@@ -49,7 +49,7 @@ async function run(task, form = null) {
     if (target) target.textContent = error.message;
     else notice(error.message, true);
   } finally {
-    busy = false; buttons.forEach(button => { button.disabled = false; });
+    busy = false; $('app-mode').disabled = false; buttons.forEach(button => { button.disabled = false; });
     if (pageEditor.screens) pageEditor.setLocked(false);
   }
 }
@@ -103,7 +103,7 @@ function render() {
         : `${item.id} · ${item.apps.length} Apps · Kontakt: ${dateLabel(item.last_seen)}`));
       const actions = node('div', undefined, 'actions');
       actions.append(button('Bearbeiten', () => kind === 'app' ? editApp(item) : editDevice(item)));
-      if (kind === 'app') actions.append(button('Vorschau', () => showPreview(item.screens)));
+      if (kind === 'app') actions.append(button('Vorschau', () => showPreview(item.rendered_screens)));
       actions.append(button('Schlüssel erneuern', () => {
         if (!confirm(`Schlüssel für „${item.title || item.name}“ ersetzen? Der bisherige Schlüssel wird sofort ungültig.`)) return;
         run(async () => {
@@ -128,7 +128,8 @@ function editApp(item = null) {
   $('app-title').value = item?.title || '';
   $('app-enabled').checked = item?.enabled ?? true;
   $('app-ttl').value = item?.ttl || 1800;
-  pageEditor.load(item?.screens || sampleScreens);
+  $('app-mode').value = item?.publish_mode || 'values';
+  pageEditor.load(item?.screens || sampleScreens, $('app-mode').value, item?.values || {});
   $('app-dialog').showModal();
 }
 function editDevice(item = null) {
@@ -161,14 +162,19 @@ $('new-app').addEventListener('click', () => editApp());
 $('new-device').addEventListener('click', () => editDevice());
 $('reload').addEventListener('click', () => run(async () => { await reload(); notice('Liste aktualisiert.'); }));
 $('preview-next').addEventListener('click', () => { if (previewScreens.length) { previewIndex = (previewIndex + 1) % previewScreens.length; renderPreview(); } });
+$('app-mode').addEventListener('change', () => {
+  try { pageEditor.setMode($('app-mode').value); }
+  catch (error) { $('app-mode').value = pageEditor.mode; $('app-form').querySelector(':scope > .form-error').textContent = error.message; }
+});
 $('app-form').addEventListener('submit', event => {
   event.preventDefault();
   let screens;
   try { screens = pageEditor.value(); } catch (error) { $('app-form').querySelector(':scope > .form-error').textContent = error.message; return; }
   run(async () => {
     const result = await api('app', {id: $('app-id').value, title: $('app-title').value,
-      enabled: $('app-enabled').checked, ttl: Number($('app-ttl').value), screens, version: appVersion});
-    $('app-dialog').close(); showToken(result, 'app'); showPreview(screens); await reload(); notice('App gespeichert.');
+      enabled: $('app-enabled').checked, ttl: Number($('app-ttl').value), screens, publish_mode: pageEditor.mode, version: appVersion});
+    $('app-dialog').close(); showToken(result, 'app'); await reload();
+    showPreview(state.apps.find(app => app.id === result.id).rendered_screens); notice('App gespeichert.');
   }, $('app-form'));
 });
 $('device-form').addEventListener('submit', event => {
