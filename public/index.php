@@ -12,7 +12,7 @@ if (($_SERVER['HTTPS'] ?? '') === 'on') { header('Strict-Transport-Security: max
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Badger Hub · Apps und Geräte</title>
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="style.css"><script src="app.js" defer></script>
+<link rel="stylesheet" href="style.css"><script src="app.js" type="module"></script>
 </head>
 <body>
 <a class="skip" href="#main">Zum Inhalt</a>
@@ -30,7 +30,27 @@ if (($_SERVER['HTTPS'] ?? '') === 'on') { header('Strict-Transport-Security: max
 <details class="panel"><summary>Letzte Verwaltungsaktivitäten</summary><ul id="audit"></ul></details>
 </div>
 </main>
-<dialog id="app-dialog" aria-labelledby="app-heading"><form id="app-form" method="post" action="api.php?r=app"><h2 id="app-heading">App registrieren</h2><label for="app-id">App-ID</label><input id="app-id" name="id" required pattern="[a-z][a-z0-9\-]{0,31}" maxlength="32" placeholder="energie"><label for="app-title">Name auf dem Display</label><input id="app-title" name="title" required maxlength="24" placeholder="Energie"><div class="two"><div><label for="app-ttl">Nach wie vielen Sekunden sind Daten alt?</label><input id="app-ttl" name="ttl" type="number" min="60" max="604800" value="1800" required></div><label class="check"><input id="app-enabled" name="enabled" type="checkbox" checked> App aktiv</label></div><label for="app-screens">Seiten und Werte (JSON)</label><textarea id="app-screens" name="screens" rows="12" spellcheck="false" required aria-describedby="screen-help"></textarea><p id="screen-help" class="hint">1–6 Seiten mit je 1–3 Zeilen. Titel: 28, Bezeichnung: 14, Wert: 22 Zeichen. Displaytexte in ASCII, z. B. „Waerme“ statt „Wärme“.</p><p class="form-error" role="alert"></p><div class="actions"><button type="submit">App speichern</button><button type="button" class="secondary" data-close>Abbrechen</button></div></form></dialog>
+<dialog id="app-dialog" aria-labelledby="app-heading"><form id="app-form" method="post" action="api.php?r=app"><h2 id="app-heading">App registrieren</h2><label for="app-id">App-ID</label><input id="app-id" name="id" required pattern="[a-z][a-z0-9\-]{0,31}" maxlength="32" placeholder="energie"><label for="app-title">Name auf dem Display</label><input id="app-title" name="title" required maxlength="24" placeholder="Energie"><div class="two"><div><label for="app-ttl">Nach wie vielen Sekunden sind Daten alt?</label><input id="app-ttl" name="ttl" type="number" min="60" max="604800" value="1800" required></div><label class="check"><input id="app-enabled" name="enabled" type="checkbox" checked> App aktiv</label></div><section id="page-editor" aria-label="Seiteneditor">
+<h3>Seiten gestalten</h3>
+<p class="hint">Ein aktiver Publisher ersetzt diese Seiten beim nächsten Senden. Dynamische Layouts deshalb im Publisher anpassen.</p>
+<p id="screen-help" class="hint">1–6 Seiten, je 1–3 Zeilen. Displaytexte in ASCII, z. B. „Waerme“ statt „Wärme“.</p>
+<p id="json-pending" class="hint" role="status" hidden>JSON-Änderungen sind offen. Unter „Erweitert“ übernehmen oder verwerfen, um das Formular weiter zu bearbeiten.</p>
+<div class="editor-layout">
+<fieldset id="page-fields"><legend>Anzeigeseiten</legend>
+<label for="editor-page">Seite auswählen</label><select id="editor-page"></select>
+<div class="actions editor-actions"><button id="page-add" type="button" class="secondary">Seite hinzufügen</button><button id="page-up" type="button" class="secondary">Seite nach vorne</button><button id="page-down" type="button" class="secondary">Seite nach hinten</button><button id="page-delete" type="button" class="danger">Seite entfernen</button></div>
+<div id="page-title-field"></div><div id="editor-rows"></div>
+<button id="row-add" type="button" class="secondary">Zeile hinzufügen</button>
+</fieldset>
+<aside class="editor-preview"><p class="eyebrow">LIVE-VORSCHAU</p><div class="badge"><div class="screen"><h2 id="editor-preview-title"></h2><div id="editor-preview-rows"></div><div class="screen-footer">A Weiter · B Laden · C Menü</div></div><div class="badge-buttons"><span>A</span><span>B</span><span>C</span></div></div><p id="editor-preview-caption" class="hint"></p><p class="hint">Layoutvorschau. Auf dem Gerät können Schrift und Abstände leicht abweichen.</p></aside>
+</div>
+<details id="advanced-pages"><summary>Erweitert: JSON bearbeiten</summary>
+<fieldset id="json-fields"><legend>JSON-Import und -Export</legend>
+<label for="app-screens">Seiten und Werte (JSON)</label><textarea id="app-screens" name="screens" rows="10" spellcheck="false" aria-describedby="json-help"></textarea>
+<p id="json-help" class="hint">Änderungen zuerst übernehmen. Ungültiges JSON ersetzt keine Formulardaten.</p>
+<div class="actions"><button id="json-apply" type="button" class="secondary">JSON übernehmen</button><button id="json-discard" type="button" class="secondary">JSON-Änderungen verwerfen</button></div>
+<p id="json-error" class="form-error" role="alert"></p><p id="json-result" role="status"></p>
+</fieldset></details></section><p class="form-error" role="alert"></p><div class="actions"><button type="submit">App speichern</button><button type="button" class="secondary" data-close>Abbrechen</button></div></form></dialog>
 <dialog id="device-dialog" aria-labelledby="device-heading"><form id="device-form" method="post" action="api.php?r=device"><h2 id="device-heading">Gerät hinzufügen</h2><label for="device-id">Geräte-ID</label><input id="device-id" name="id" required pattern="[a-z][a-z0-9\-]{0,31}" maxlength="32" placeholder="badger-flur"><label for="device-name">Gerätename</label><input id="device-name" name="name" required maxlength="64" placeholder="Badger im Flur"><label for="device-refresh">Aktualisierung alle … Sekunden</label><input id="device-refresh" name="refresh" type="number" min="60" max="86400" value="900" required><label class="check"><input id="device-enabled" name="enabled" type="checkbox" checked> Gerät aktiv</label><fieldset><legend>Zugewiesene Apps (maximal 10)</legend><div id="assignments"></div></fieldset><p class="form-error" role="alert"></p><div class="actions"><button type="submit">Gerät speichern</button><button type="button" class="secondary" data-close>Abbrechen</button></div></form></dialog>
 <dialog id="token-dialog" aria-labelledby="token-heading"><h2 id="token-heading">Schlüssel jetzt sichern</h2><p>Er wird nur einmal angezeigt. Bei Verlust kannst du einen neuen erzeugen.</p><label for="new-token">API-Schlüssel</label><textarea id="new-token" rows="3" readonly spellcheck="false"></textarea><p id="token-context" class="hint"></p><button id="token-done">Gesichert · schließen</button></dialog>
 <footer>Badger Hub · PHP + JavaScript · App-Protokoll v1</footer>

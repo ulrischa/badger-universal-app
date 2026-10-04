@@ -1,3 +1,4 @@
+import {PageEditor} from './editor.js';
 'use strict';
 const $ = (id) => document.getElementById(id);
 let csrf = '';
@@ -7,6 +8,7 @@ let deviceVersion = 0;
 let previewScreens = [];
 let previewIndex = 0;
 let busy = false;
+const pageEditor = new PageEditor($('page-editor'));
 const sampleScreens = [{title: 'Energie heute', rows: [{label: 'PV', value: '5.8 kW'}, {label: 'Akku', value: '84 %'}, {label: 'Netz', value: '-2.1 kW'}]}];
 
 async function api(route, body) {
@@ -37,16 +39,18 @@ function notice(message, error = false) {
 async function run(task, form = null) {
   if (busy) return;
   busy = true;
+  pageEditor.setLocked(true);
   const buttons = [...document.querySelectorAll('button')].filter(button => !button.disabled);
   buttons.forEach(button => { button.disabled = true; });
-  if (form) form.querySelector('.form-error')?.replaceChildren();
+  if (form) form.querySelector(':scope > .form-error')?.replaceChildren();
   try { await task(); }
   catch (error) {
-    const target = form?.closest('dialog')?.open ? form.querySelector('.form-error') : null;
+    const target = form?.closest('dialog')?.open ? form.querySelector(':scope > .form-error') : null;
     if (target) target.textContent = error.message;
     else notice(error.message, true);
   } finally {
     busy = false; buttons.forEach(button => { button.disabled = false; });
+    if (pageEditor.screens) pageEditor.setLocked(false);
   }
 }
 function node(tag, text, className) {
@@ -117,18 +121,18 @@ function render() {
   $('audit').replaceChildren(...state.audit.map(event => node('li', `${dateLabel(event.at)} · ${event.event} · ${event.target}`)));
 }
 function editApp(item = null) {
-  $('app-form').reset(); $('app-form').querySelector('.form-error').textContent = '';
+  $('app-form').reset(); $('app-form').querySelector(':scope > .form-error').textContent = '';
   appVersion = item?.version || 0;
   $('app-heading').textContent = item ? 'App bearbeiten' : 'App registrieren';
   $('app-id').value = item?.id || ''; $('app-id').readOnly = !!item;
   $('app-title').value = item?.title || '';
   $('app-enabled').checked = item?.enabled ?? true;
   $('app-ttl').value = item?.ttl || 1800;
-  $('app-screens').value = JSON.stringify(item?.screens || sampleScreens, null, 2);
+  pageEditor.load(item?.screens || sampleScreens);
   $('app-dialog').showModal();
 }
 function editDevice(item = null) {
-  $('device-form').reset(); $('device-form').querySelector('.form-error').textContent = '';
+  $('device-form').reset(); $('device-form').querySelector(':scope > .form-error').textContent = '';
   deviceVersion = item?.version || 0;
   $('device-heading').textContent = item ? 'Gerät bearbeiten' : 'Gerät hinzufügen';
   $('device-id').value = item?.id || ''; $('device-id').readOnly = !!item;
@@ -158,9 +162,10 @@ $('new-device').addEventListener('click', () => editDevice());
 $('reload').addEventListener('click', () => run(async () => { await reload(); notice('Liste aktualisiert.'); }));
 $('preview-next').addEventListener('click', () => { if (previewScreens.length) { previewIndex = (previewIndex + 1) % previewScreens.length; renderPreview(); } });
 $('app-form').addEventListener('submit', event => {
-  event.preventDefault(); run(async () => {
-    let screens;
-    try { screens = JSON.parse($('app-screens').value); } catch { throw new Error('Seiten enthalten kein gültiges JSON.'); }
+  event.preventDefault();
+  let screens;
+  try { screens = pageEditor.value(); } catch (error) { $('app-form').querySelector(':scope > .form-error').textContent = error.message; return; }
+  run(async () => {
     const result = await api('app', {id: $('app-id').value, title: $('app-title').value,
       enabled: $('app-enabled').checked, ttl: Number($('app-ttl').value), screens, version: appVersion});
     $('app-dialog').close(); showToken(result, 'app'); showPreview(screens); await reload(); notice('App gespeichert.');

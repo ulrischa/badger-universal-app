@@ -1,0 +1,160 @@
+# Copy to /config/packages/badger_hub.yaml. See docs/home-assistant-bitaxe.md.
+# Each invocation is bounded; no retry loop and no parallel writes per app.
+rest_command:
+  badger_read_bitaxe:
+    url: !secret badger_bitaxe_url
+    method: GET
+    timeout: 5
+  badger_bitaxe_status:
+    url: !secret badger_status_url
+    method: GET
+    timeout: 5
+    verify_ssl: true
+    headers:
+      authorization: !secret badger_bitaxe_authorization
+  badger_bitaxe_publish:
+    url: !secret badger_publish_url
+    method: POST
+    timeout: 5
+    verify_ssl: true
+    headers:
+      authorization: !secret badger_bitaxe_authorization
+    content_type: application/json
+    payload: "{{ {'version': version | int, 'screens': screens} | to_json }}"
+  badger_home_status:
+    url: !secret badger_status_url
+    method: GET
+    timeout: 5
+    verify_ssl: true
+    headers:
+      authorization: !secret badger_home_authorization
+  badger_home_publish:
+    url: !secret badger_publish_url
+    method: POST
+    timeout: 5
+    verify_ssl: true
+    headers:
+      authorization: !secret badger_home_authorization
+    content_type: application/json
+    payload: "{{ {'version': version | int, 'screens': screens} | to_json }}"
+
+script:
+  badger_publish_bitaxe:
+    alias: Badger - Bitaxe senden
+    mode: single
+    sequence:
+      - action: rest_command.badger_read_bitaxe
+        response_variable: source
+      - if: >-
+          {{ source.status != 200 or source.content is not mapping
+             or not is_number(source.content.get('hashRate'))
+             or not is_number(source.content.get('temp'))
+             or not is_number(source.content.get('power')) }}
+        then:
+          - stop: Bitaxe response missing or invalid; previous pages retained
+            error: true
+      - variables:
+          hash_rate: "{{ source.content.hashRate | float }}"
+          temperature: "{{ source.content.temp | float }}"
+          power: "{{ source.content.power | float }}"
+      - if: >-
+          {{ not (0 <= hash_rate <= 100000000 and -100 <= temperature <= 200
+                   and 0 <= power <= 1000000) }}
+        then:
+          - stop: Bitaxe values outside display bounds
+            error: true
+      - variables:
+          screens:
+            - title: Bitaxe
+              rows:
+                - label: Hashrate
+                  value: "{{ '%.1f GH/s' | format(hash_rate) }}"
+                - label: Temperatur
+                  value: "{{ '%.1f deg C' | format(temperature) }}"
+                - label: Leistung
+                  value: "{{ '%.1f W' | format(power) }}"
+      - action: rest_command.badger_bitaxe_status
+        response_variable: current
+      - if: >-
+          {{ current.status != 200 or current.content is not mapping
+             or current.content.get('version') is not integer
+             or current.content.version < 1 }}
+        then:
+          - stop: Hub version unavailable; no publish attempted
+            error: true
+      - action: rest_command.badger_bitaxe_publish
+        data:
+          version: "{{ current.content.version }}"
+          screens: "{{ screens }}"
+        response_variable: published
+      - if: "{{ published.status != 200 }}"
+        then:
+          - stop: Hub rejected publish; inspect response status in trace
+            error: true
+  badger_publish_home:
+    alias: Badger - Home Assistant senden
+    mode: single
+    sequence:
+      # Replace both entity IDs with your own sensors. Units must be deg C and %.
+      - variables:
+          temperature_entity: sensor.DEINE_TEMPERATUR
+          humidity_entity: sensor.DEINE_LUFTFEUCHTE
+      - variables:
+          temperature_state: "{{ states(temperature_entity) }}"
+          humidity_state: "{{ states(humidity_entity) }}"
+      - if: >-
+          {{ not is_number(temperature_state) or not is_number(humidity_state) }}
+        then:
+          - stop: Home Assistant sensors unavailable; previous pages retained
+            error: true
+      - variables:
+          temperature: "{{ temperature_state | float }}"
+          humidity: "{{ humidity_state | float }}"
+      - if: "{{ not (-100 <= temperature <= 200 and 0 <= humidity <= 100) }}"
+        then:
+          - stop: Home Assistant values outside display bounds
+            error: true
+      - variables:
+          screens:
+            - title: Zuhause
+              rows:
+                - label: Temperatur
+                  value: "{{ '%.1f deg C' | format(temperature) }}"
+                - label: Luftfeuchte
+                  value: "{{ '%.0f %%' | format(humidity) }}"
+      - action: rest_command.badger_home_status
+        response_variable: current
+      - if: >-
+          {{ current.status != 200 or current.content is not mapping
+             or current.content.get('version') is not integer
+             or current.content.version < 1 }}
+        then:
+          - stop: Hub version unavailable; no publish attempted
+            error: true
+      - action: rest_command.badger_home_publish
+        data:
+          version: "{{ current.content.version }}"
+          screens: "{{ screens }}"
+        response_variable: published
+      - if: "{{ published.status != 200 }}"
+        then:
+          - stop: Hub rejected publish; inspect response status in trace
+            error: true
+
+automation:
+  - id: badger_update_bitaxe_every_minute
+    alias: Badger - bitaxe jede Minute
+    mode: single
+    triggers:
+      - trigger: time_pattern
+        minutes: "/1"
+    actions:
+      - action: script.badger_publish_bitaxe
+  - id: badger_update_home_every_minute
+    alias: Badger - home jede Minute
+    mode: single
+    triggers:
+      - trigger: time_pattern
+        minutes: "/1"
+    actions:
+      - action: script.badger_publish_home

@@ -358,3 +358,27 @@ footer {
     transition:filter .15s;
   }
 }
+/* Editor controls use the same request-based application and need no build step. */
+#app-dialog { width:min(96vw,1000px); }
+select { font:inherit; width:100%; padding:.7rem; border:1px solid #85968c; border-radius:6px; background:#fff; color:inherit; min-width:0; }
+.editor-layout { display:grid; grid-template-columns:minmax(0,1.3fr) minmax(270px,1fr); gap:1.4rem; align-items:start; }
+#page-fields { min-width:0; padding:1rem; margin-top:0; }
+.editor-row { min-width:0; padding:.8rem; }
+.editor-row-fields { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.4fr); gap:.8rem; margin-bottom:.6rem; }
+.editor-field { min-width:0; }
+.editor-field label { margin-top:.35rem; }
+.editor-field .hint { display:block; }
+.editor-actions { margin-block:.8rem 1rem; }
+.editor-actions button,.editor-row button { font-size:.8rem; min-height:44px; padding:.4rem .6rem; }
+.editor-preview { position:sticky; top:0; }
+.editor-preview .badge { margin-top:.6rem; }
+#advanced-pages { margin-top:1rem; padding:1rem; border:1px solid var(--line); border-radius:8px; }
+#json-pending { padding:.8rem; background:#fff3d1; border-left:4px solid #9c6800; }
+#page-fields:disabled { opacity:.65; }
+[aria-invalid="true"] { border-color:#9b2424!important; }
+@media(max-width:720px) {
+  .editor-layout { grid-template-columns:minmax(0,1fr); }
+  .editor-preview { position:static; max-width:420px; }
+  .editor-row-fields { grid-template-columns:minmax(0,1fr); }
+  #app-dialog { padding:1rem; }
+}

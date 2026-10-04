@@ -12,7 +12,8 @@ values through a scoped API. Adding a display app does not require new firmware.
   read-only display apps. No remotely downloaded code or device control actions.
 
 The German administration includes app/device registration, assignments,
-activation, deletion, key rotation, a display layout preview and an audit trail.
+activation, deletion, key rotation, a form-based page editor with live preview,
+advanced JSON import/export and an audit trail.
 
 ## Installation and usage guides
 
@@ -24,6 +25,11 @@ activation, deletion, key rotation, a display layout preview and an audit trail.
 - **[Understand the push/pull data flow](docs/data-flow.md)** — architecture and sequence diagrams, alternatives, latency and failure behavior.
 
 **Recommended order: install the server → register a sample app and device → configure the Badger → add an independent data producer.**
+
+- **[Bitaxe and Home Assistant setup](docs/home-assistant-bitaxe.md)** — ready-to-adapt HA package, local or shared hosting, scheduled updates and troubleshooting.
+
+**No persistent PHP CLI process is needed. The PHP demo runs once; the included
+Home Assistant automations run once per minute.**
 
 ## Status
 
@@ -44,8 +50,8 @@ of the device or hosting configuration. See [verification](docs/verification.md)
 
 The hub performs **no outbound HTTP requests**. An unavailable data source cannot
 block device requests, and there is no arbitrary URL-fetch/SSRF surface. Producers
-own their source-specific integration. This version does not ship Home Assistant,
-Fronius, weather or other domain-specific adapters.
+own their source-specific integration. A Home Assistant/Bitaxe YAML example is included; Fronius, weather and other
+domain-specific integrations remain producer responsibilities.
 
 ### Push upstream, pull on the device
 

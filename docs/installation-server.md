@@ -4,6 +4,12 @@ Diese Anleitung richtet einen einzelnen Badger Hub unter einer eigenen HTTPS-Dom
 ein, zum Beispiel `https://badge.example.com`. Ersetze Domain, Dateipfade,
 PHP-Version und Benutzer durch die Werte deines Servers.
 
+**Betriebsmodell:** PHP verarbeitet einzelne Webanfragen. Kein CLI-Dauerlauf,
+Worker oder Node-Prozess erforderlich. Dynamische Daten liefert beispielsweise das
+[Home-Assistant-Paket](home-assistant-bitaxe.md). Der Hub kann ebenso im eigenen LAN
+laufen: internes DNS und HTTPS mit einer von HA und Badger vertrauten CA verwenden.
+Für rein lokalen Zugriff sind keine Router-Portfreigaben erforderlich.
+
 ## 1. Voraussetzungen prüfen
 
 - PHP ab 8.2 mit PDO SQLite, Sessions und JSON; eine aktuell gepflegte PHP-Version verwenden.

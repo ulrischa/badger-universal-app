@@ -25,7 +25,7 @@ Watchdog-Neustart pausiert der Netzwerkzugriff bis B gedrückt wird. C beim Rese
 halten lässt den USB-Zugang zur Reparatur offen.
 
 Diese erste Fassung umfasst Text-/Werteanzeigen und USB-Dauerbetrieb. Fertige
-Fronius-/Home-Assistant-Adapter, Steueraktionen und stromsparender Batteriebetrieb
+Fronius-Adapter, Steueraktionen und stromsparender Batteriebetrieb
 sind nicht enthalten. Die Tests ersetzen keinen Test auf deinem echten Badger;
 die Hardware-Abnahme ist in `docs/verification.md` beschrieben.
 
@@ -41,3 +41,7 @@ Vollständige Installation und Betrieb: [README.md](README.md).
 **Der Publisher liefert an den Hub; der Badger holt dessen gespeicherte Daten ab.
 Das Anlegen einer App startet noch keinen Datenlieferanten. Taste B liest den Hub,
 sie startet keine neue Messung an der Datenquelle.**
+
+**Neu: [Bitaxe und Home Assistant einrichten](docs/home-assistant-bitaxe.md).**
+Formular-Seiteneditor mit Vorschau und optionalem JSON. Lokales Hosting ist möglich;
+kein PHP-Dauerprozess nötig. Das PHP-Beispiel läuft einmal, das HA-Paket jede Minute.

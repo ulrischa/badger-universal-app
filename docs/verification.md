@@ -33,6 +33,7 @@ Run from the repository root:
 php tests/server.php
 python3 -m unittest discover -s tests -v
 node --check public/app.js
+node --check public/editor.js
 ```
 
 For the optional browser test, start a **fresh development installation** on
@@ -41,6 +42,19 @@ For the optional browser test, start a **fresh development installation** on
 path can be supplied via `PLAYWRIGHT_MODULE`, and a Chromium binary via
 `CHROMIUM_EXECUTABLE`. The test creates `energie` and `flur`; never point it at a
 production installation. Browser tooling is not a server dependency.
+
+## Page editor and HA examples — 2026-10-04
+
+- Chromium desktop/mobile: page/row creation and deletion, page ordering, live preview,
+  JSON draft apply/discard, six-page/three-row limits, hidden-page validation and
+  persisted round-trip passed, with no console errors or horizontal mobile overflow.
+- Existing 21 PHP checks and 16 Python HTTP/device/transport tests passed.
+- Optional `python3 tests/check_ha_example.py` (development-only PyYAML and Jinja2)
+  checks the example YAML and templates with simulated responses: valid sources,
+  missing/non-numeric values, display bounds, rejected status reads and HTTP 409.
+  It checks no blind replay. It does **not** load HA's integration schemas or run HA.
+- No production dependencies were added. Actual HA configuration validation and an
+  end-to-end Bitaxe → HA → hub → Badger test remain installation acceptance steps.
 
 ## Required on a real Badger before unattended use
 

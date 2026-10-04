@@ -9,29 +9,20 @@ reicht die Weboberfläche; ein externer Datenlieferant ist noch nicht erforderli
 2. App-ID `energie` und Displayname `Energie` eintragen. Die ID ist nach dem
    Anlegen nicht mehr über die Oberfläche veränderbar.
 3. App aktiv lassen. Als TTL beispielsweise `900` Sekunden wählen.
-4. Unter „Seiten und Werte (JSON)“ folgende Seiten eintragen:
+4. Im **Seiteneditor** den Seitentitel und die Zeilen mit Bezeichnung/Wert ausfüllen.
+   Beispielsweise `Energie heute`, `PV` / `5.8 kW`, `Akku` / `84 %`.
+   „Zeile hinzufügen“ ergänzt bis zu drei Zeilen; „Seite hinzufügen“ bis zu sechs Seiten.
+   Über die Seitenauswahl wechseln, mit „Seite nach vorne“/„Seite nach hinten“ umsortieren.
+   Die Vorschau reagiert sofort. Zeichenzähler zeigen die jeweiligen Grenzen.
 
-```json
-[
-  {
-    "title": "Energie heute",
-    "rows": [
-      {"label": "PV", "value": "5.8 kW"},
-      {"label": "Akku", "value": "84 %"},
-      {"label": "Netz", "value": "-2.1 kW"}
-    ]
-  },
-  {
-    "title": "Messung",
-    "rows": [
-      {"label": "Stand UTC", "value": "09:00"}
-    ]
-  }
-]
-```
+Unter **„Erweitert: JSON bearbeiten“** kannst du weiterhin das komplette Seitenarray
+importieren oder kopieren. Nach einer Änderung „JSON übernehmen“ oder
+„JSON-Änderungen verwerfen“ wählen; erst danach lässt sich die App speichern.
+Ungültiges JSON ersetzt die Formularwerte nicht. Auch nicht sichtbare Seiten werden
+vor dem Speichern geprüft. Die letzte Seite und die letzte Zeile bleiben erhalten.
 
 5. Speichern. Den einmalig angezeigten **Publisher-Schlüssel** sichern.
-6. „Vorschau“ anklicken; mit „Nächste Seite“ die zweite Seite anzeigen.
+6. „Vorschau“ anklicken; mit „Nächste Seite“ durch weitere angelegte Seiten blättern.
 
 Es sind Beispielwerte, keine Verbindung zu deiner PV-Anlage. Eine App ist hier
 ein Datensatz mit Anzeigeseiten. Erst ein eigener Publisher liefert echte Werte.
@@ -74,7 +65,7 @@ Messvorgang bei der ursprünglichen Quelle aus. Das erklärt der [Datenfluss](da
 ## 4. Werte zunächst von Hand ändern
 
 1. Bei „Energie“ auf „Bearbeiten“ klicken.
-2. Im JSON beispielsweise den PV-Wert ändern und speichern.
+2. Im Seiteneditor beispielsweise den PV-Wert ändern und speichern.
 3. Auf dem Badger B drücken oder den nächsten automatischen Abruf abwarten.
 
 Bei einem Versionskonflikt wurden zwischenzeitlich Daten geändert. Eigene Eingaben
@@ -82,6 +73,9 @@ bei Bedarf separat sichern, die Liste neu laden und den aktuellen Stand prüfen,
 bevor du erneut bearbeitest. Nicht blind über neuere Werte speichern.
 
 ## 5. Dynamische Daten per PHP liefern
+
+**Das Beispiel läuft einmal und beendet sich; es installiert keinen Zeitplan.**
+Für deine konkreten Geräte: [Bitaxe und Home Assistant Schritt für Schritt](home-assistant-bitaxe.md).
 
 `examples/publish.php` liest die aktuelle App-Version und veröffentlicht danach
 vollständige Seiten. Es benötigt PHP CLI mit `ext-curl` und läuft auf einem Rechner,
@@ -182,8 +176,11 @@ Verlorene Einmalschlüssel lassen sich nicht wieder anzeigen; einen neuen erzeug
 - Bis zu sechs Seiten je App und drei Zeilen je Seite.
 - Titel: App 24, Seite 28 Zeichen; Zeile: Bezeichnung 14, Wert 22 Zeichen.
 - Kein Download ausführbarer Apps, keine Gerätesteuerung, keine QR-/Bildseiten.
-- Kein nativer Home-Assistant-/Fronius-Adapter; die API ist die Integrationsschnittstelle.
+- Home-Assistant-/Bitaxe-Beispiel als YAML-Paket; kein eingebauter Quellenabruf im Hub.
 - USB-Dauerbetrieb; Batterieschlaf noch nicht implementiert.
 - Hardware-Abnahme offen, siehe [Prüfliste](verification.md).
 
 Zurück: [README](../README.md) · [Serverinstallation](installation-server.md) · [Badgerinstallation](installation-badger.md).
+
+**Automatisch belieferte Apps:** Ein Publisher ersetzt alle Seiten beim nächsten
+Senden. Ihr Layout im Publisher ändern; statische Notizen als eigene App führen.

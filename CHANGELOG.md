@@ -1,5 +1,13 @@
 # Changelog
 
+## Page editor and integration examples — 2026-10-04
+
+- Added form-based page/row editing, page ordering, limits and live preview.
+- Retained explicit JSON import/export with validation before replacement.
+- Added bounded, independent Home Assistant publishers for Bitaxe and HA sensors.
+- Added local/shared-hosting instructions and clarified one-shot vs scheduled operation.
+- Expanded browser coverage for editing, invalid drafts, limits and persistence.
+
 ## Documentation update — 2026-10-04
 
 - **Added step-by-step German server, Badger and usage guides.**
