@@ -45,36 +45,50 @@ function connect_db(array $config): PDO
         PDO::ATTR_TIMEOUT => 2,
     ]);
     $db->exec('PRAGMA foreign_keys=ON; PRAGMA busy_timeout=2000');
+    $schema = (int) $db->query('PRAGMA user_version')->fetchColumn();
+    if ($schema === 1) { migrate_db($db); }
+    if ($schema > 2) { throw new RuntimeException('Database schema is newer than this application'); }
     return $db;
 }
 
 function migrate_db(PDO $db): void
 {
-    if ((int) $db->query('PRAGMA user_version')->fetchColumn() > 1) {
+    if ((int) $db->query('PRAGMA user_version')->fetchColumn() > 2) {
         throw new RuntimeException('Database schema is newer than this application');
     }
     $db->exec('PRAGMA journal_mode=WAL');
-    $db->exec('CREATE TABLE IF NOT EXISTS apps (
-        id TEXT PRIMARY KEY, title TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1,
-        ttl INTEGER NOT NULL, screens TEXT NOT NULL, token_hash TEXT NOT NULL UNIQUE,
-        updated_at INTEGER NOT NULL, version INTEGER NOT NULL DEFAULT 1
-    );
-    CREATE TABLE IF NOT EXISTS devices (
-        id TEXT PRIMARY KEY, name TEXT NOT NULL, token_hash TEXT NOT NULL UNIQUE,
-        enabled INTEGER NOT NULL DEFAULT 1, refresh INTEGER NOT NULL DEFAULT 900,
-        version INTEGER NOT NULL DEFAULT 1, last_seen INTEGER
-    );
-    CREATE TABLE IF NOT EXISTS assignments (
-        device_id TEXT NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
-        app_id TEXT NOT NULL REFERENCES apps(id) ON DELETE CASCADE,
-        position INTEGER NOT NULL, PRIMARY KEY(device_id, app_id)
-    );
-    CREATE TABLE IF NOT EXISTS limits (
-        bucket TEXT PRIMARY KEY, window INTEGER NOT NULL, count INTEGER NOT NULL, expires INTEGER NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS audit (
-        id INTEGER PRIMARY KEY, at INTEGER NOT NULL, event TEXT NOT NULL, target TEXT NOT NULL
-    ); PRAGMA user_version=1');
+    transaction($db, static function () use ($db): void {
+        // Re-read under the write reservation: another request may have migrated already.
+        $schema = (int) $db->query('PRAGMA user_version')->fetchColumn();
+        if ($schema > 2) { throw new RuntimeException('Database schema is newer than this application'); }
+        if ($schema === 2) { return; }
+        $db->exec('CREATE TABLE IF NOT EXISTS apps (
+            id TEXT PRIMARY KEY, title TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1,
+            ttl INTEGER NOT NULL, screens TEXT NOT NULL, token_hash TEXT NOT NULL UNIQUE,
+            updated_at INTEGER NOT NULL, version INTEGER NOT NULL DEFAULT 1
+        );
+        CREATE TABLE IF NOT EXISTS devices (
+            id TEXT PRIMARY KEY, name TEXT NOT NULL, token_hash TEXT NOT NULL UNIQUE,
+            enabled INTEGER NOT NULL DEFAULT 1, refresh INTEGER NOT NULL DEFAULT 900,
+            version INTEGER NOT NULL DEFAULT 1, last_seen INTEGER
+        );
+        CREATE TABLE IF NOT EXISTS assignments (
+            device_id TEXT NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+            app_id TEXT NOT NULL REFERENCES apps(id) ON DELETE CASCADE,
+            position INTEGER NOT NULL, PRIMARY KEY(device_id, app_id)
+        );
+        CREATE TABLE IF NOT EXISTS limits (
+            bucket TEXT PRIMARY KEY, window INTEGER NOT NULL, count INTEGER NOT NULL, expires INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS audit (
+            id INTEGER PRIMARY KEY, at INTEGER NOT NULL, event TEXT NOT NULL, target TEXT NOT NULL
+        )');
+        $db->exec("ALTER TABLE apps ADD COLUMN publish_mode TEXT NOT NULL DEFAULT 'pages';
+            ALTER TABLE apps ADD COLUMN values_json TEXT NOT NULL DEFAULT '{}';
+            ALTER TABLE apps ADD COLUMN data_version INTEGER NOT NULL DEFAULT 0;
+            ALTER TABLE apps ADD COLUMN data_updated_at INTEGER NOT NULL DEFAULT 0;
+            PRAGMA user_version=2");
+    });
 }
 
 function query_db(PDO $db, string $sql, array $params = []): PDOStatement
@@ -193,7 +207,7 @@ function new_token(): string
     return bin2hex(random_bytes(32));
 }
 
-function read_body(): array
+function read_body(bool $associative = true): array
 {
     if (strtolower(trim(explode(';', $_SERVER['CONTENT_TYPE'] ?? '')[0])) !== 'application/json') {
         fail(415, 'application/json erforderlich.');
@@ -203,10 +217,11 @@ function read_body(): array
         fail(413, 'Anfrage zu groß.');
     }
     try {
-        $body = json_decode($raw, true, 16, JSON_THROW_ON_ERROR);
+        $body = json_decode($raw, $associative, 16, JSON_THROW_ON_ERROR);
     } catch (JsonException) {
         fail(400, 'Ungültiges JSON.');
     }
+    if (!$associative && $body instanceof stdClass) { return (array) $body; }
     if (!is_array($body) || array_is_list($body)) {
         fail(400, 'JSON-Objekt erwartet.');
     }
@@ -236,8 +251,8 @@ function device_manifest(PDO $db, array $device): array
     foreach ($apps as $app) {
         $result['apps'][] = [
             'id' => $app['id'], 'title' => $app['title'],
-            'updated_at' => (int) $app['updated_at'], 'ttl' => (int) $app['ttl'],
-            'screens' => json_decode($app['screens'], true, 16, JSON_THROW_ON_ERROR),
+            'updated_at' => app_updated_at($app), 'ttl' => (int) $app['ttl'],
+            'screens' => app_screens($app),
         ];
     }
     if (strlen(encode_json($result)) > 32768) {
@@ -245,3 +260,5 @@ function device_manifest(PDO $db, array $device): array
     }
     return $result;
 }
+
+require_once __DIR__ . '/display.php';

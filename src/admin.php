@@ -3,9 +3,13 @@ declare(strict_types=1);
 
 function admin_state(PDO $db): array
 {
-    $apps = query_db($db, 'SELECT id,title,enabled,ttl,screens,updated_at,version FROM apps ORDER BY id')->fetchAll();
+    $apps = query_db($db, 'SELECT id,title,enabled,ttl,screens,updated_at,version,publish_mode,values_json,data_version,data_updated_at FROM apps ORDER BY id')->fetchAll();
     foreach ($apps as &$app) {
         $app['enabled'] = (bool) $app['enabled'];
+        $app['rendered_screens'] = app_screens($app);
+        $app['updated_at'] = app_updated_at($app);
+        $app['values'] = json_decode($app['values_json'], false, 16, JSON_THROW_ON_ERROR);
+        unset($app['values_json']);
         $app['screens'] = json_decode($app['screens'], true, 16, JSON_THROW_ON_ERROR);
     }
     unset($app);
@@ -20,29 +24,36 @@ function admin_state(PDO $db): array
 
 function save_app(PDO $db, array $body): array
 {
-    exact_keys($body, ['id', 'title', 'enabled', 'ttl', 'screens', 'version']);
+    $keys = ['id', 'title', 'enabled', 'ttl', 'screens', 'version'];
+    if (array_key_exists('publish_mode', $body)) { $keys[] = 'publish_mode'; }
+    exact_keys($body, $keys);
     $id = id_value($body['id']);
     $title = text_value($body['title'], 24, true);
     $enabled = bool_value($body['enabled']);
     $ttl = int_value($body['ttl'], 60, 604800);
-    $screens = encode_json(screens_value($body['screens']));
     $version = int_value($body['version'], 0, PHP_INT_MAX - 1);
-    return transaction($db, static function () use ($db, $id, $title, $enabled, $ttl, $screens, $version): array {
-        $old = query_db($db, 'SELECT version FROM apps WHERE id=?', [$id])->fetchColumn();
-        if (($old === false && $version !== 0) || ($old !== false && (int) $old !== $version)) {
+    return transaction($db, static function () use ($db, $body, $id, $title, $enabled, $ttl, $version): array {
+        $old = query_db($db, 'SELECT * FROM apps WHERE id=?', [$id])->fetch();
+        if (($old === false && $version !== 0) || ($old !== false && (int) $old['version'] !== $version)) {
             fail(409, 'App wurde geändert. Liste neu laden und Änderungen prüfen.');
         }
+        // Old clients preserve the existing mode; legacy creates keep their original contract.
+        $mode = array_key_exists('publish_mode', $body) ? $body['publish_mode'] : ($old['publish_mode'] ?? 'pages');
+        if (!in_array($mode, ['pages', 'values'], true)) { fail(422, 'Ungültige Publisher-Betriebsart.'); }
+        $screens = encode_json($mode === 'values' ? layout_value($body['screens']) : screens_value($body['screens']));
         $token = null;
         if ($old === false) {
-            if ((int) $db->query('SELECT COUNT(*) FROM apps')->fetchColumn() >= 100) {
-                fail(422, 'Maximal 100 Apps.');
-            }
+            if ((int) $db->query('SELECT COUNT(*) FROM apps')->fetchColumn() >= 100) { fail(422, 'Maximal 100 Apps.'); }
             $token = new_token();
-            query_db($db, 'INSERT INTO apps(id,title,enabled,ttl,screens,token_hash,updated_at) VALUES(?,?,?,?,?,?,?)',
-                [$id, $title, (int) $enabled, $ttl, $screens, hash('sha256', $token), time()]);
+            query_db($db, 'INSERT INTO apps(id,title,enabled,ttl,screens,token_hash,updated_at,publish_mode) VALUES(?,?,?,?,?,?,?,?)',
+                [$id, $title, (int) $enabled, $ttl, $screens, hash('sha256', $token), time(), $mode]);
         } else {
-            query_db($db, 'UPDATE apps SET title=?,enabled=?,ttl=?,screens=?,updated_at=?,version=version+1 WHERE id=?',
-                [$title, (int) $enabled, $ttl, $screens, time(), $id]);
+            $changed_mode = $mode !== $old['publish_mode'];
+            query_db($db, 'UPDATE apps SET title=?,enabled=?,ttl=?,screens=?,updated_at=?,version=version+1,publish_mode=?,
+                values_json=?,data_version=data_version+?,data_updated_at=? WHERE id=?',
+                [$title, (int) $enabled, $ttl, $screens, time(), $mode,
+                 $changed_mode ? '{}' : $old['values_json'], (int) $changed_mode,
+                 $changed_mode ? 0 : $old['data_updated_at'], $id]);
         }
         audit_event($db, 'app.saved', $id);
         return ['id' => $id, 'token' => $token];

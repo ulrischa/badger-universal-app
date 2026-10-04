@@ -5,38 +5,88 @@ CORS, tokens in `Authorization: Bearer TOKEN`, never query strings. Device and
 publisher endpoints do not use browser sessions. Browser/admin mutations use a
 session and `X-CSRF-Token` issued by `GET session` (rotated after login).
 
-## Producer workflow
+## Hub-managed layout and value publishing (recommended)
 
-1. Register an app through the admin interface. Keep its publisher key privately.
-2. `GET /api.php?r=app-status` with that key returns:
-   `{"id":"energy","version":1,"updated_at":1791100000}`.
-3. `POST /api.php?r=publish` with the same key and this body:
+New apps created in the UI default to `publish_mode: "values"`. Register a layout
+in the admin UI, then publish only named values. No source-specific integration
+is built into the hub. Existing apps remain in `pages` mode.
+
+`GET app-status` with the app's publisher token returns:
 
 ```json
-{
-  "version": 1,
-  "screens": [
-    {
-      "title": "Energie heute",
-      "rows": [
-        {"label": "PV", "value": "5.8 kW"},
-        {"label": "Akku", "value": "84 %"},
-        {"label": "Netz", "value": "-2.1 kW"}
-      ]
-    }
-  ]
-}
+{"id":"room","publish_mode":"values","version":1,"data_version":0,"updated_at":0,"data_updated_at":0}
 ```
 
-Response: `{"version":2}`. A publisher can update only its own pages, not its
-name, TTL, enabled state, token or device assignments. Server receipt time is the
-freshness timestamp. A producer must not publish old source data as if freshly
-measured; include source measurement time in a row when relevant.
+`version` is the admin/layout revision. `data_version` is the independent data
+revision. `POST publish-values` uses the **data_version** in its `version` field:
 
-A concurrent edit returns **409** and `X-App-Version`. Fetch status again and decide
-whether to replace the newer content; do not blindly replay an old update. A
-network timeout may have occurred after commit. The same version cannot be applied
-twice. Producers should schedule a later fresh update after re-reading status.
+```json
+{"version":0,"values":{"temperature":21.5,"status":"OK"}}
+```
+
+Response: `{"data_version":1}`. This replaces the complete data snapshot, without
+changing the layout, admin version, title, TTL, enabled state or assignments.
+The current token, enabled state, mode and data revision are checked atomically.
+Do not include `screens` in this request. Data updates and layout saves can occur
+in either order without losing either change. Concurrent data writes conflict.
+
+### Layout schema
+
+Admin `screens` in `values` mode accepts a mix of these row shapes:
+
+```json
+[
+  {"title":"Room","rows":[
+    {"label":"Temp","field":"temperature","unit":"deg C","decimals":1},
+    {"label":"Location","value":"Room 1"}
+  ]}
+]
+```
+
+Exact keys are required. Bound rows have `label`, `field`, `unit`, `decimals`;
+static rows have `label`, `value`. Field keys match `[a-z][a-z0-9_]{0,31}`.
+Unit: 0–8 printable ASCII characters. Decimals: integer 0–3. No expressions,
+interpolation, remote URLs or executable code. One field may be used in several rows.
+
+### Data and rendering rules
+
+- `values` must be a JSON object with at most 32 fields; `{}` clears it.
+- Each value is a finite number with absolute value <= 1e12, printable ASCII text
+  of 1–22 characters, or null. Arrays, nested objects and booleans are rejected.
+- Unknown-to-layout field names are accepted within these bounds for later use.
+- Missing/null fields display `--`, with no unit. Every publish is a full snapshot:
+  omitted fields are removed rather than retained with a misleading fresh timestamp.
+- Numbers are formatted with the chosen decimals and a period; strings are not
+  parsed as numbers. Nonempty units are appended with one space. No unit conversion.
+- A formatted result longer than 22 characters displays `OVERFLOW`, never a
+  silently truncated measurement. Display output retains the original v1 schema.
+- `data_updated_at` is server receipt time, initially zero. Layout edits do not
+  refresh it. A bound app's manifest `updated_at` uses this timestamp. An app with
+  only static rows uses its last admin save timestamp instead. Source measurement
+  freshness remains the producer's responsibility; TTL is per app, not per field.
+
+### Conflicts and mode changes
+
+Stale data version or wrong mode returns 409. Fetch `app-status` and decide whether
+to send a fresh snapshot later. Do not blindly replay after a timeout: commit may
+already have happened. There is no automatic retry loop. Mode changes clear data,
+reset data receipt time and increment data_version, preventing reuse of an old
+revision after a mode round-trip. Keys and assignments remain unchanged.
+
+## Legacy whole-page publishing
+
+`publish_mode: "pages"` preserves the original API. `GET app-status` returns the
+same fields; use **version**, not data_version. `POST publish` accepts:
+
+```json
+{"version":1,"screens":[{"title":"Energy","rows":[{"label":"PV","value":"5.8 kW"}]}]}
+```
+
+Response: `{"version":2}`. The publisher replaces whole pages and advances the
+shared admin/page revision. Editor changes can be overwritten by the next successful
+publish in this mode. The endpoint rejects hub-managed apps (409), and conversely
+`publish-values` rejects legacy apps. Legacy conflicts include `X-App-Version`;
+`app-status` is authoritative for both mode and revisions.
 
 ## Device manifest
 
@@ -75,12 +125,17 @@ password hashes, API hashes or publisher secrets appear in the manifest.
 | `login` | POST | `{password}`; returns rotated CSRF token |
 | `logout` | POST | No data needed; destroys session |
 | `state` | GET | Apps, devices, last 20 admin audit events; no token hashes |
-| `app` | POST | `{id,title,enabled,ttl,screens,version}` |
+| `app` | POST | `{id,title,enabled,ttl,screens,version,publish_mode?}` |
 | `device` | POST | `{id,name,enabled,refresh,apps,version}` |
 | `rotate` | POST | `{kind:"app" or "device",id,version}` |
 | `delete` | POST | Same shape as rotate |
 
 `version:0` creates an entry; updates must supply its current version from state.
+`publish_mode` is `values` or `pages`. Omission preserves an existing app's mode;
+legacy API creates without it default to `pages`. Admin state includes the stored
+`screens` layout, rendered `rendered_screens`, latest `values`, `data_version`,
+`data_updated_at` and `publish_mode`. These additional fields are not sent to devices.
+
 Mutations are short transactions. Creation/rotation returns `{id,token}` exactly
 once; other saves return `{id,token:null}`. Lost tokens cannot be retrieved.
 App deletion removes assignments. Save/rotate/delete rejects stale versions.
@@ -95,6 +150,7 @@ newly selected apps in registry order.
 | Apps assigned to one device | 10 |
 | Pages per app / rows per page | 6 / 3; minimum 1 each |
 | App title / page title | 24 / 28 printable ASCII characters |
+| Data fields / key / unit / decimals | 32 / 32 / 8 / 0–3 |
 | Row label / value | 14 / 22 printable ASCII characters |
 | Device name | 64 UTF-8 bytes |
 | IDs | 1–32, lowercase letter first, then letters/digits/hyphens |

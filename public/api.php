@@ -30,24 +30,32 @@ try {
     if (!is_string($route)) { fail(404, 'Nicht gefunden.'); }
     $method = $_SERVER['REQUEST_METHOD'];
     $routes = ['session' => 'GET', 'state' => 'GET', 'manifest' => 'GET', 'app-status' => 'GET', 'login' => 'POST', 'logout' => 'POST',
-        'app' => 'POST', 'device' => 'POST', 'delete' => 'POST', 'rotate' => 'POST', 'publish' => 'POST'];
+        'app' => 'POST', 'device' => 'POST', 'delete' => 'POST', 'rotate' => 'POST', 'publish' => 'POST', 'publish-values' => 'POST'];
     if (!isset($routes[$route])) { fail(404, 'Nicht gefunden.'); }
     if ($method !== $routes[$route]) { header('Allow: ' . $routes[$route]); fail(405, 'Methode nicht erlaubt.'); }
     $db = connect_db($config);
-    if (in_array($route, ['manifest', 'publish', 'app-status'], true)) {
+    if (in_array($route, ['manifest', 'publish', 'publish-values', 'app-status'], true)) {
         $record = bearer_record($db, $route === 'manifest' ? 'device' : 'app');
         if ($route === 'manifest') {
             query_db($db, 'UPDATE devices SET last_seen=? WHERE id=?', [time(), $record['id']]);
             respond(device_manifest($db, $record));
         }
-        if ($route === 'app-status') { respond(['id' => $record['id'], 'version' => (int) $record['version'], 'updated_at' => (int) $record['updated_at']]); }
-        $body = read_body();
+        if ($route === 'app-status') { respond(['id' => $record['id'], 'version' => (int) $record['version'],
+            'data_version' => (int) $record['data_version'], 'publish_mode' => $record['publish_mode'],
+            'updated_at' => app_updated_at($record), 'data_updated_at' => (int) $record['data_updated_at']]); }
+        $body = read_body($route !== 'publish-values');
+        if ($route === 'publish-values') {
+            if (!(($body['values'] ?? null) instanceof stdClass)) { fail(422, 'values muss ein JSON-Objekt sein.'); }
+            $body['values'] = (array) $body['values'];
+            respond(publish_values($db, $record, $body));
+        }
+        if ($record['publish_mode'] !== 'pages') { fail(409, 'Layout wird im Hub verwaltet. publish-values verwenden.'); }
         exact_keys($body, ['screens', 'version']);
         $screens = encode_json(screens_value($body['screens']));
         $version = int_value($body['version'], 1, PHP_INT_MAX - 1);
-        $updated = query_db($db, 'UPDATE apps SET screens=?,updated_at=?,version=version+1 WHERE id=? AND version=? AND token_hash=? AND enabled=1',
+        $updated = query_db($db, "UPDATE apps SET screens=?,updated_at=?,version=version+1 WHERE id=? AND version=? AND token_hash=? AND enabled=1 AND publish_mode='pages'",
             [$screens, time(), $record['id'], $version, $record['token_hash']]);
-        if ($updated->rowCount() !== 1) { fail(409, 'Version veraltet. Aktuelle Version im Header X-App-Version.'); }
+        if ($updated->rowCount() !== 1) { fail(409, 'Version oder Betriebsart geändert. App-Status erneut lesen.'); }
         respond(['version' => $version + 1]);
     }
     // Reject cross-origin requests before opening a session.

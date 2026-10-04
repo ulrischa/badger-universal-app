@@ -137,6 +137,36 @@ class HttpTests(unittest.TestCase):
             fcntl.flock(handle, fcntl.LOCK_UN)
         self.assertEqual(self.request('state')[0], 200)
 
+    def test_055_values_api_keeps_layout(self):
+        token, body = self.app('values-app')
+        body.update(version=1, publish_mode='values', screens=[{'title': 'Generic', 'rows': [
+            {'label': 'Amount', 'field': 'amount', 'unit': 'kg', 'decimals': 2}]}])
+        self.assertEqual(self.request('app', body)[0], 200)
+        status = self.request('app-status', token=token)[1]
+        self.assertEqual(status['publish_mode'], 'values')
+        self.assertEqual(status['updated_at'], 0)
+        revision = status['data_version']
+        self.assertEqual(self.request('publish', {'version': 2, 'screens': []}, token=token)[0], 409)
+        self.assertEqual(self.request('publish-values', {'version': revision, 'values': {'amount': 12.5}}, token=token)[0], 200)
+        self.assertEqual(self.request('publish-values', {'version': revision, 'values': {'amount': 20}}, token=token)[0], 409)
+        self.assertEqual(self.request('publish-values', {'version': revision + 1, 'values': {'amount': {}}}, token=token)[0], 422)
+        self.assertEqual(self.request('publish-values', {'version': revision + 1, 'values': []}, token=token)[0], 422)
+        # Same admin version remains valid after publishing data.
+        body.update(version=2)
+        body['screens'][0]['title'] = 'Renamed'
+        self.assertEqual(self.request('app', body)[0], 200)
+        apps = self.request('state')[1]['apps']
+        app = next(app for app in apps if app['id'] == 'values-app')
+        self.assertEqual(app['rendered_screens'][0]['rows'][0]['value'], '12.50 kg')
+        self.assertEqual(app['screens'][0]['rows'][0]['field'], 'amount')
+        device = self.request('device', {'id': 'data-badge', 'name': 'Data', 'enabled': True,
+            'refresh': 60, 'version': 0, 'apps': ['values-app']})[1]['token']
+        manifest = self.request('manifest', token=device)[1]['apps'][0]
+        self.assertEqual(manifest['screens'][0]['title'], 'Renamed')
+        self.assertEqual(set(manifest['screens'][0]['rows'][0]), {'label', 'value'})
+        self.assertEqual(self.request('publish-values', {'version': 0, 'values': {'amount': 1}}, token=device)[0], 401)
+        self.assertEqual(self.request('publish-values', {'version': revision + 1, 'values': {}, 'screens': []}, token=token)[0], 422)
+
     def test_06_login_rate_limit(self):
         for _ in range(10):
             status, _, _ = self.request('login', {'password': 'wrong-password'})
